@@ -1,0 +1,27 @@
+# Binaries
+/backend/hnsw-server
+/backend/*.exe
+
+# Compiled Go binaries
+*.idx
+
+# Node.js
+node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/.env.local
+*.log
+
+# Datasets — do not commit large datasets (SIFT etc.);
+# use scripts/download_sift.sh to obtain them.
+/datasets/
+*.fvecs
+*.ivecs
+
+# OS
+.DS_Store
+
+# Agents
+.opencode
+AGENTS.md
+opencode.json
