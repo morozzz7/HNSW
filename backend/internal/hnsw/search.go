@@ -8,7 +8,7 @@ import "fmt"
 // closest candidates in a capped max-heap. It returns the best candidates sorted
 // by distance ascending. If record is true, it also fills a LayerTrace with the
 // visit order and closest node found at this layer.
-func (idx *Index) searchLayer(q []float32, ep uint32, ef, level int, record bool) ([]item, *LayerTrace) {
+func (idx *Index) searchLayer(q []float32, ep uint32, ef, level int, record bool) ([]Result, *LayerTrace) {
 	nodes := idx.nodes
 	dist := idx.dist
 
@@ -27,29 +27,28 @@ func (idx *Index) searchLayer(q []float32, ep uint32, ef, level int, record bool
 	Wc.cap = ef
 
 	firstDist := dist(q, nodes[ep].vector)
-	minHeapPush(&W, item{id: ep, dist: firstDist})
-	maxHeapPushUncapped(&Wc, item{id: ep, dist: firstDist})
+	minHeapPush(&W, Result{ID: ep, Dist: firstDist})
+	maxHeapPushUncapped(&Wc, Result{ID: ep, Dist: firstDist})
 	visited.add(ep)
 
-	var closest item
-	closest = item{id: ep, dist: firstDist}
+	closest := Result{ID: ep, Dist: firstDist}
 
 	for len(W) > 0 {
 		cur := minHeapPop(&W)
 
 		// Stop if the current node is farther than the worst kept candidate.
-		if maxHeapLen(Wc) > 0 && cur.dist > maxHeapPeek(Wc).dist {
+		if maxHeapLen(Wc) > 0 && cur.Dist > maxHeapPeek(Wc).Dist {
 			continue
 		}
 
 		if record {
-			trace.Visited = append(trace.Visited, cur.id)
+			trace.Visited = append(trace.Visited, cur.ID)
 		}
-		if cur.dist < closest.dist {
+		if cur.Dist < closest.Dist {
 			closest = cur
 		}
 
-		nd := nodes[cur.id]
+		nd := nodes[cur.ID]
 		if level >= len(nd.neighbors) {
 			continue
 		}
@@ -59,15 +58,15 @@ func (idx *Index) searchLayer(q []float32, ep uint32, ef, level int, record bool
 			}
 			d := dist(q, nodes[nid].vector)
 			visited.add(nid)
-			if maxHeapLen(Wc) < ef || d < maxHeapPeek(Wc).dist {
-				maxHeapPush(&Wc, item{id: nid, dist: d})
-				minHeapPush(&W, item{id: nid, dist: d})
+			if maxHeapLen(Wc) < ef || d < maxHeapPeek(Wc).Dist {
+				maxHeapPush(&Wc, Result{ID: nid, Dist: d})
+				minHeapPush(&W, Result{ID: nid, Dist: d})
 			}
 		}
 	}
 
 	if record {
-		trace.Closest = closest.id
+		trace.Closest = closest.ID
 	}
 
 	// Return best candidates sorted by distance ascending.
@@ -76,8 +75,9 @@ func (idx *Index) searchLayer(q []float32, ep uint32, ef, level int, record bool
 }
 
 // Search performs k-NN search using Algorithm 5 with per-query efSearch.
-// ef = max(efSearch, k). It does not record a trace.
-func (idx *Index) Search(q []float32, k, efSearch int) ([]item, error) {
+// ef = max(efSearch, k). It does not record a trace. Results are sorted by
+// distance ascending and contain up to k entries.
+func (idx *Index) Search(q []float32, k, efSearch int) ([]Result, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
@@ -100,7 +100,7 @@ func (idx *Index) Search(q []float32, k, efSearch int) ([]item, error) {
 		if len(res) == 0 {
 			break
 		}
-		ep = res[0].id
+		ep = res[0].ID
 	}
 
 	// Layer 0 with full ef.
@@ -114,7 +114,7 @@ func (idx *Index) Search(q []float32, k, efSearch int) ([]item, error) {
 // SearchWithTrace performs k-NN search and records the per-layer search path.
 // Returns (results, trace, error). The trace is used by the frontend for
 // visualization of the search descent.
-func (idx *Index) SearchWithTrace(q []float32, k, efSearch int) ([]item, *Trace, error) {
+func (idx *Index) SearchWithTrace(q []float32, k, efSearch int) ([]Result, *Trace, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
@@ -141,7 +141,7 @@ func (idx *Index) SearchWithTrace(q []float32, k, efSearch int) ([]item, *Trace,
 		if len(res) == 0 {
 			break
 		}
-		ep = res[0].id
+		ep = res[0].ID
 	}
 
 	res, lt := idx.searchLayer(q, ep, ef, 0, true)

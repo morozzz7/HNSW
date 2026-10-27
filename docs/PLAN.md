@@ -14,7 +14,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core) and Stage 2 (Data) complete. Stage 0.3 (frontend scaffolding) still in the frontend agent's domain.
+**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data) and Stage 3 (Brute force and quality metrics) complete. Stage 0.3 (frontend scaffolding) still in the frontend agent's domain.
 
 ---
 
@@ -67,9 +67,9 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 ## Stage 3. Brute force and quality metrics (backend)
 
-- [ ] 3.1 `internal/bruteforce`: exact k-NN (linear scan, optionally parallel)
-- [ ] 3.2 recall@k against brute force
-- [ ] 3.3 Latency (p50/p95/p99), QPS, build time, memory estimate
+- [x] 3.1 `internal/bruteforce`: exact k-NN (linear scan, optionally parallel)
+- [x] 3.2 recall@k against brute force
+- [x] 3.3 Latency (p50/p95/p99), QPS, build time, memory estimate
 
 ## Stage 4. Benchmark module (backend, `internal/benchmark`): Chapter 3
 
@@ -157,6 +157,7 @@ _None yet._
 - HNSW is implemented from scratch, no third-party ANN libraries.
 - Vectors are `float32`; internal IDs are `uint32`.
 - `efSearch` is passed per query, not stored in the index.
+- `hnsw.Search` / `SearchWithTrace` return exported `[]hnsw.Result` (`ID`, `Dist`) so results are usable outside the package (bruteforce comparison, HTTP API).
 - Visualization coordinates (PCA -> 2D) are computed by the backend.
 - API contract source of truth: `docs/API.md`.
 
@@ -167,6 +168,7 @@ _None yet._
 | 1 | 2026-10-26 | backend | `docs/reports/2026-10-26_01_backend_etape-0-nastroika-repozytoriya.md` | Этап 0 (0.1, 0.2, 0.4–0.7) |
 | 2 | 2026-10-26 | backend | `docs/reports/2026-10-26_02_backend_etap-1-yadro-hnsw.md` | Этап 1 (1.1–1.13) |
 | 3 | 2026-10-27 | backend | `docs/reports/2026-10-27_03_backend_etap-2-sloj-dannyh.md` | Этап 2 (2.1–2.8) |
+| 4 | 2026-10-27 | backend | `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md` | Этап 3 (3.1–3.3) |
 
 ## Change log
 
@@ -175,3 +177,4 @@ _None yet._
 | 2026-10-26 | backend | Этап 1 (1.1–1.13): реализовано ядро HNSW с нуля в `backend/internal/hnsw` — метрики расстояний (L², cosine, inner product), типизированные кучами min/max, посещение с generation counter + `sync.Pool`, `Index`/`Config` с генерацией уровня `floor(-ln(U)·mL)`, SEARCH-LAYER (Алг. 2), SELECT-NEIGHBORS (Алг. 3 и 4), INSERT (Алг. 1) с двунаправленными ссылками и обрезкой переполненных соседей, K-NN-SEARCH (Алг. 5) с per-query `efSearch`, `SearchWithTrace`, `Stats`. Тесты: юнит-тесты всех компонентов, инварианты графа, детерминизм по seed, recall@10 = 1.0000 на 10k случайных векторов (M=16, efC=200, efSearch=100, dim=16, 100 запросов), `go test -race` пройден (102.8s). Бенчмарки: Insert ~87.7 мс на 1000 вставок, Search ~67.9 мкс/запрос. Зависимости не добавлялись (алгоритм реализован с нуля). Отчёт: `docs/reports/2026-10-26_02_backend_etap-1-yadro-hnsw.md`. |
 | 2026-10-27 | backend | Этап 2 (2.1–2.8): слой данных в `backend/internal/dataset` и `backend/internal/projection` — загрузчики CSV/JSON/.fvecs/.ivecs, генераторы uniform/gaussian/clusters, валидация (размерность, NaN/Inf, лимиты), in-memory `Store` с метаданными и preview, PCA -> 2D с кэшем, скрипт `scripts/download_sift.sh`. Тесты: unit-тесты загрузчиков, генератора, Store, валидации и PCA. `go vet`/`go test`/`gofmt` чисто. Отчёт: `docs/reports/2026-10-27_03_backend_etap-2-sloj-dannyh.md`. |
 | 2026-10-26 | backend | Этап 0: структура репозитория (`backend/`, `frontend/`, `scripts/`), `backend/go.mod` (`hnsw-coursework`), `backend/Makefile` (run/test/bench/vet/lint), корневой `.gitignore`, `README.md`, `docs/API.md` (version 1 контракта). `go vet`/`go test` пока без пакетов (кода нет) — проверка станет обязательна с Этапа 1. Отчёт: `docs/reports/2026-10-26_01_backend_etape-0-nastroika-repozytoriya.md`. |
+| 2026-10-27 | backend | Этап 3 (3.1–3.3): `backend/internal/bruteforce` — точный k-NN линейным сканом (последовательно и параллельно через `NewWithWorkers`; результат детерминирован, тай-брейк по id), `Recall` (recall@k по множеству id); `backend/internal/benchmark` — перцентили задержки p50/p95/p99 (линейная интерполяция), QPS по средней задержке, `MeasureBuildTime`, оценка памяти через `HeapInUse`; интеграционный тест качества HNSW vs bruteforce. Результаты: recall@10 = 1.0000 (n=3000, dim=16, M=16, efC=100, efSearch=50, 30 запросов), построение 165.6 мс, память 824 KiB, p50=0.033 мс, p95=0.052 мс, p99=0.066 мс, QPS ≈ 27 362. Бенчмарки: bruteforce 0.965 мс/запрос (n=10000, dim=16, k=10) ≈ 1036 QPS, параллельный (4 воркера) 0.316 мс ≈ 3163 QPS (ускорение ≈3.05×); HNSW 61.8 мкс/запрос (n=5000, efSearch=100). `hnsw.Search`/`SearchWithTrace` теперь возвращают экспортируемый `[]hnsw.Result` (`ID`, `Dist`) вместо внутреннего `item` — для сравнения из других пакетов и будущего API (поведение не менялось). `go vet`, `gofmt`, `go test`, `go test -race` — чисто. Отчёт: `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md`. |

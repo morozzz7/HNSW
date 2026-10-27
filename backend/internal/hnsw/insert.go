@@ -49,7 +49,7 @@ func (idx *Index) Insert(vector []float32, externalID uint32) (uint32, error) {
 		if len(res) == 0 {
 			break
 		}
-		ep = res[0].id
+		ep = res[0].ID
 	}
 
 	// Insert at levels min(level, maxL) down to 0. Levels above maxL have no
@@ -92,7 +92,7 @@ func (idx *Index) Insert(vector []float32, externalID uint32) (uint32, error) {
 
 		// Closest candidate becomes the entry point for the next lower layer.
 		if len(W) > 0 {
-			ep = W[0].id
+			ep = W[0].ID
 		}
 	}
 
@@ -125,12 +125,12 @@ func removeLinkLocked(a *node, b uint32, level int) {
 	a.neighbors[level] = removeUint32(a.neighbors[level], b)
 }
 
-// neighborCandidates builds item list (id, distance from v) for each id.
+// neighborCandidates builds a Result list (id, distance from v) for each id.
 // Caller must hold idx.mu.
-func neighborCandidates(v []float32, ids []uint32, nodes []*node, dist DistanceFunc) []item {
-	res := make([]item, 0, len(ids))
+func neighborCandidates(v []float32, ids []uint32, nodes []*node, dist DistanceFunc) []Result {
+	res := make([]Result, 0, len(ids))
 	for _, id := range ids {
-		res = append(res, item{id: id, dist: dist(v, nodes[id].vector)})
+		res = append(res, Result{ID: id, Dist: dist(v, nodes[id].vector)})
 	}
 	return res
 }

@@ -45,8 +45,8 @@ func TestInsertAndSearchBasic(t *testing.T) {
 		if len(res) == 0 {
 			t.Fatalf("search %d: no results", i)
 		}
-		if res[0].id != uint32(i) {
-			t.Fatalf("search %d: nearest = %d, want %d", i, res[0].id, i)
+		if res[0].ID != uint32(i) {
+			t.Fatalf("search %d: nearest = %d, want %d", i, res[0].ID, i)
 		}
 	}
 }
@@ -76,8 +76,8 @@ func TestSearchKResults(t *testing.T) {
 	}
 	// Distances should be non-decreasing.
 	for i := 1; i < len(res); i++ {
-		if res[i].dist < res[i-1].dist {
-			t.Fatalf("results not sorted: %v > %v at %d", res[i-1].dist, res[i].dist, i)
+		if res[i].Dist < res[i-1].Dist {
+			t.Fatalf("results not sorted: %v > %v at %d", res[i-1].Dist, res[i].Dist, i)
 		}
 	}
 }
@@ -299,7 +299,7 @@ func TestQualityRecall(t *testing.T) {
 		}
 		found := 0
 		for _, it := range res {
-			if gtSet[it.id] {
+			if gtSet[it.ID] {
 				found++
 			}
 		}

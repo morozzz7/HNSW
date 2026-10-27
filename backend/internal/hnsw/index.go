@@ -10,33 +10,33 @@ import (
 // node is a single element in the HNSW graph. Its internal id is its index in
 // the Index.nodes slice. neighbors[l] holds the ids of adjacent nodes at level l.
 type node struct {
-	id        uint32      // internal id == position in Index.nodes
+	id        uint32 // internal id == position in Index.nodes
 	vector    []float32
-	maxLevel  int         // highest level this node exists at (0-based)
-	neighbors [][]uint32  // neighbors[l] = adjacent node ids at level l, length = maxLevel+1
+	maxLevel  int        // highest level this node exists at (0-based)
+	neighbors [][]uint32 // neighbors[l] = adjacent node ids at level l, length = maxLevel+1
 }
 
 // Config holds HNSW parameters (Malkov & Yashunin, 2016).
 type Config struct {
-	M             int     // max connections per node per level (non-zero levels)
-	Mmax0         int     // max connections at level 0; 0 means 2*M
-	EfConstruction int    // size of dynamic candidate list during insert
-	Metric        Metric  // distance metric
-	Seed          int64   // seed for reproducible level generation
-	UseHeuristic  bool    // use heuristic (Alg. 4) vs simple (Alg. 3) neighbor selection
+	M                int    // max connections per node per level (non-zero levels)
+	Mmax0            int    // max connections at level 0; 0 means 2*M
+	EfConstruction   int    // size of dynamic candidate list during insert
+	Metric           Metric // distance metric
+	Seed             int64  // seed for reproducible level generation
+	UseHeuristic     bool   // use heuristic (Alg. 4) vs simple (Alg. 3) neighbor selection
 	ExtendCandidates bool   // consider pruned candidates when selecting (reserved)
-	KeepPruned    bool    // keep pruned connections (reserved)
+	KeepPruned       bool   // keep pruned connections (reserved)
 }
 
 // defaultConfig returns a sensible default configuration.
 func defaultConfig() Config {
 	return Config{
-		M:             16,
-		Mmax0:         0, // resolved to 2*M at index creation
+		M:              16,
+		Mmax0:          0, // resolved to 2*M at index creation
 		EfConstruction: 200,
-		Metric:        MetricL2,
-		Seed:          0,
-		UseHeuristic:  true,
+		Metric:         MetricL2,
+		Seed:           0,
+		UseHeuristic:   true,
 	}
 }
 
@@ -82,15 +82,15 @@ type Stats struct {
 // Index is the HNSW graph index. It is safe for concurrent use: searches take a
 // read lock, inserts take a write lock.
 type Index struct {
-	mu      sync.RWMutex
-	config  Config
-	dist    DistanceFunc
-	rng     *rand.Rand
-	nodes   []*node
-	dim     int
+	mu         sync.RWMutex
+	config     Config
+	dist       DistanceFunc
+	rng        *rand.Rand
+	nodes      []*node
+	dim        int
 	entryPoint uint32
-	maxLevel  int
-	mL        float64 // 1 / ln(M)
+	maxLevel   int
+	mL         float64 // 1 / ln(M)
 
 	// external id mapping
 	extToInt map[uint32]uint32 // external id -> internal index
