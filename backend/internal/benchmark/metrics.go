@@ -1,7 +1,9 @@
-// Package benchmark provides quality metrics for approximate nearest neighbor
-// search: query latency percentiles (p50/p95/p99), QPS, index build time and
-// heap memory usage. It is the building block of the HNSW vs brute-force
-// comparison (Stage 4).
+// Package benchmark provides quality metrics and experiment runners for
+// approximate nearest neighbor search: query latency percentiles (p50/p95/p99),
+// QPS, index build time and heap memory usage, a parameter-grid runner
+// (RunGrid) that compares HNSW against exact brute-force search, a scaling
+// runner (RunScaling) for query time versus dataset size, and JSON/CSV export
+// of the results (WriteJSON, WriteCSV).
 package benchmark
 
 import (

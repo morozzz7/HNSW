@@ -14,7 +14,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data) and Stage 3 (Brute force and quality metrics) complete. Stage 0.3 (frontend scaffolding) still in the frontend agent's domain.
+**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module) and Stage 5 tasks 5.1–5.5 (HTTP API: server, datasets, async index build + SSE, vectors, search) are complete. Stage 0.3 (frontend scaffolding) is still in the frontend agent's domain; the next backend tasks are 5.6 (`SearchWithTrace` contract verification) and 5.7 (`GET /graph`).
 
 ---
 
@@ -73,20 +73,20 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 ## Stage 4. Benchmark module (backend, `internal/benchmark`): Chapter 3
 
-- [ ] 4.1 Parameter grid run `M x efConstruction x efSearch`
-- [ ] 4.2 Results: recall@k, QPS, latency, build time, speedup vs brute force
-- [ ] 4.3 Heuristic vs simple neighbor selection comparison
-- [ ] 4.4 Metric comparison (L2 / cosine), optional
-- [ ] 4.5 Scaling: query time vs N (1k, 10k, 100k, 1M)
-- [ ] 4.6 Export results to JSON/CSV (for tables in the written report)
+- [x] 4.1 Parameter grid run `M x efConstruction x efSearch`
+- [x] 4.2 Results: recall@k, QPS, latency, build time, speedup vs brute force
+- [x] 4.3 Heuristic vs simple neighbor selection comparison
+- [x] 4.4 Metric comparison (L2 / cosine), optional
+- [x] 4.5 Scaling: query time vs N (1k, 10k, 100k, 1M)
+- [x] 4.6 Export results to JSON/CSV (for tables in the written report)
 
 ## Stage 5. HTTP API (backend, `internal/api`)
 
-- [ ] 5.1 Server skeleton, routing, CORS, unified errors, graceful shutdown
-- [ ] 5.2 `POST/GET /datasets` (multipart upload, generation)
-- [ ] 5.3 `POST /index`, `GET /index/status`, `GET /index/events` (SSE), `GET /index/stats`
-- [ ] 5.4 `POST /vectors` (insert into a ready index)
-- [ ] 5.5 `POST /search` (mode: hnsw / bruteforce, `trace`)
+- [x] 5.1 Server skeleton, routing, CORS, unified errors, graceful shutdown
+- [x] 5.2 `POST/GET /datasets` (multipart upload, generation)
+- [x] 5.3 `POST /index`, `GET /index/status`, `GET /index/events` (SSE), `GET /index/stats`
+- [x] 5.4 `POST /vectors` (insert into a ready index)
+- [x] 5.5 `POST /search` (mode: hnsw / bruteforce, `trace`)
 - [ ] 5.6 `SearchWithTrace` in core: per-layer path (visited nodes, closest per layer)
 - [ ] 5.7 `GET /graph` (`level`, `limit`, `around`, PCA coordinates)
 - [ ] 5.8 `POST /benchmark` (run + fetch results)
@@ -160,6 +160,12 @@ _None yet._
 - `hnsw.Search` / `SearchWithTrace` return exported `[]hnsw.Result` (`ID`, `Dist`) so results are usable outside the package (bruteforce comparison, HTTP API).
 - Visualization coordinates (PCA -> 2D) are computed by the backend.
 - API contract source of truth: `docs/API.md`.
+- The HTTP layer uses `backend/internal/indexmanager` to own the current index, its dataset copy, build state (single `RWMutex`, lock order manager -> `hnsw.Index`), external-id mapping, brute-force counterpart and SSE subscribers; `internal/api` only translates HTTP <-> manager types.
+- Index builds are asynchronous and reset the previous index; searches during a build return `INDEX_NOT_READY`, a second concurrent build is rejected with 409. External ids for dataset rows are `"0".."N-1"`, server-assigned ids for inserted vectors are `"ext_<n>"`; `/search` accepts `vectorId` as a string or a number (`FlexID`).
+- API distance output: `l2` is actual Euclidean (`sqrt` of squared L2), `cosine` is `1 - similarity`, `inner_product` is the negative dot product (smaller = closer). `trace` is returned only for HNSW.
+- Added `GET /api/v1/health` and extra error codes (`FILE_TOO_LARGE`, `UNSUPPORTED_FILE_TYPE`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `INTERNAL_ERROR`) to `docs/API.md`; no other contract changes.
+- `benchmark.Result` / `benchmark.ScalingResult` are the wire-ready rows for `POST /benchmark`: `MarshalJSON` emits `recall@<k>` as in the contract, while CSV export keeps a stable `recall` column independent of `k`.
+- Query timing is calibrated by repeated invocations (minimum of 5 trials must reach `minSampleDuration = 1 ms`, up to 4096 repeats) because the development machine's clock is very coarse; this keeps QPS/latency meaningful for fast queries.
 
 ## Reports index
 
@@ -169,6 +175,8 @@ _None yet._
 | 2 | 2026-10-26 | backend | `docs/reports/2026-10-26_02_backend_etap-1-yadro-hnsw.md` | Этап 1 (1.1–1.13) |
 | 3 | 2026-10-27 | backend | `docs/reports/2026-10-27_03_backend_etap-2-sloj-dannyh.md` | Этап 2 (2.1–2.8) |
 | 4 | 2026-10-27 | backend | `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md` | Этап 3 (3.1–3.3) |
+| 5 | 2026-10-29 | backend | `docs/reports/2026-10-29_01_backend_etap-4-benchmark-modul.md` | Этап 4 (4.1–4.6) |
+| 6 | 2026-10-29 | backend | `docs/reports/2026-10-29_02_backend_etap-5-http-api.md` | Этап 5 (5.1–5.5) |
 
 ## Change log
 
@@ -178,3 +186,5 @@ _None yet._
 | 2026-10-27 | backend | Этап 2 (2.1–2.8): слой данных в `backend/internal/dataset` и `backend/internal/projection` — загрузчики CSV/JSON/.fvecs/.ivecs, генераторы uniform/gaussian/clusters, валидация (размерность, NaN/Inf, лимиты), in-memory `Store` с метаданными и preview, PCA -> 2D с кэшем, скрипт `scripts/download_sift.sh`. Тесты: unit-тесты загрузчиков, генератора, Store, валидации и PCA. `go vet`/`go test`/`gofmt` чисто. Отчёт: `docs/reports/2026-10-27_03_backend_etap-2-sloj-dannyh.md`. |
 | 2026-10-26 | backend | Этап 0: структура репозитория (`backend/`, `frontend/`, `scripts/`), `backend/go.mod` (`hnsw-coursework`), `backend/Makefile` (run/test/bench/vet/lint), корневой `.gitignore`, `README.md`, `docs/API.md` (version 1 контракта). `go vet`/`go test` пока без пакетов (кода нет) — проверка станет обязательна с Этапа 1. Отчёт: `docs/reports/2026-10-26_01_backend_etape-0-nastroika-repozytoriya.md`. |
 | 2026-10-27 | backend | Этап 3 (3.1–3.3): `backend/internal/bruteforce` — точный k-NN линейным сканом (последовательно и параллельно через `NewWithWorkers`; результат детерминирован, тай-брейк по id), `Recall` (recall@k по множеству id); `backend/internal/benchmark` — перцентили задержки p50/p95/p99 (линейная интерполяция), QPS по средней задержке, `MeasureBuildTime`, оценка памяти через `HeapInUse`; интеграционный тест качества HNSW vs bruteforce. Результаты: recall@10 = 1.0000 (n=3000, dim=16, M=16, efC=100, efSearch=50, 30 запросов), построение 165.6 мс, память 824 KiB, p50=0.033 мс, p95=0.052 мс, p99=0.066 мс, QPS ≈ 27 362. Бенчмарки: bruteforce 0.965 мс/запрос (n=10000, dim=16, k=10) ≈ 1036 QPS, параллельный (4 воркера) 0.316 мс ≈ 3163 QPS (ускорение ≈3.05×); HNSW 61.8 мкс/запрос (n=5000, efSearch=100). `hnsw.Search`/`SearchWithTrace` теперь возвращают экспортируемый `[]hnsw.Result` (`ID`, `Dist`) вместо внутреннего `item` — для сравнения из других пакетов и будущего API (поведение не менялось). `go vet`, `gofmt`, `go test`, `go test -race` — чисто. Отчёт: `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md`. |
+| 2026-10-29 | backend | Этап 4 (4.1–4.6): в `backend/internal/benchmark` добавлены `RunGrid` (сетка `M × efConstruction × efSearch × metric × heuristic`; индекс строится один раз на комбинацию и переиспользуется для всех `efSearch`, точный bruteforce-эталон считается один раз на метрику), `Result` с JSON-полями контракта (`recall@<k>` через `MarshalJSON`), `RunScaling` (по умолчанию N = 1k/10k/100k/1M, список N и число запросов конфигурируются), экспорт `WriteJSON`/`WriteCSV` и файловые обёртки со стабильным CSV-заголовком. Из-за грубого разрешения часов добавлена калибровка замеров: минимум из 5 проб должен достичь 1 мс, до 4096 повторов; тест Этапа 3 переведён на общие `measureExact`/`measureSearch`. Проверка: `gofmt` по изменённым файлам чисто, `go vet ./...` — ok, `go test ./... -count=1` — ok, `go test -race ./internal/benchmark ./internal/bruteforce` — ok, `go test ./internal/benchmark -count=3` — ok. Эксперимент (n=5000, dim=16, 100 запросов, k=10): recall@10 = 1.0000 при M=8/efC=200/efSearch=100 (QPS ≈ 13 932); при recall ≥ 0.99 ускорение против перебора ≈ 6.6–19.3×, при efSearch=10 — до ≈ 79×; heuristic vs simple: при efSearch=10 recall 0.862 vs 0.928, построение 967 vs 1438 мс; l2 vs cosine: близкий recall, cosine медленнее на 10–20 %. Масштабирование 1k→10k→100k: QPS 16 696 → 7 176 → 6 025, построение 104.6 мс → 2.17 с → 57.5 с, ускорение 1.84× → 10.41× → 103.81×; точка 1M не запускалась (не проверена). Отчёт: `docs/reports/2026-10-29_01_backend_etap-4-benchmark-modul.md`. |
+| 2026-10-29 | backend | Этап 5 (5.1–5.5): HTTP API на стандартном `net/http` + `internal/indexmanager`. Добавлены `cmd/server` (PORT, signal.NotifyContext, graceful `Shutdown`), `internal/api` (`Server`/`Handler`, CORS для `localhost:5173`, единый конверт ошибок, `FlexID`, panic-recovery, `GET /health`), `POST/GET /datasets` (multipart `.csv`/`.json` до 256 MiB и generate с лимитом `n*dim ≤ 50M`), `POST /index` (202, асинхронная сборка, пересборка заменяет индекс, вторая сборка → 409), `GET /index/status`, SSE `GET /index/events` (`progress`/`done`/`error`, снимок состояния, heartbeat, закрытие), `GET /index/stats` (`nodesPerLevel`, `degreeDistribution {min,max,mean,p50}`), `POST /vectors` (id `ext_<n>`, синхронное обновление bruteforce и id-маппинга), `POST /search` (`hnsw`/`bruteforce`, `vector` или `vectorId` строкой/числом, `ef = max(efSearch,k)`, `trace` только для HNSW, L2 с `sqrt`, cosine и inner product документированы). Контракт `docs/API.md` расширен health-эндпоинтом, кодами `FILE_TOO_LARGE`/`UNSUPPORTED_FILE_TYPE`/`NOT_FOUND`/`METHOD_NOT_ALLOWED`/`INTERNAL_ERROR`, значениями по умолчанию и семантикой id/расстояний. Проверка: `gofmt` по затронутым файлам чисто, `go vet ./...` — ok, `go build ./...` — ok, `go test ./... -count=1` — ok (api 0.101s, indexmanager 0.085s, cmd/server 0.123s), `go test -race ./... -count=1` — ok (api 1.284s, indexmanager 1.366s, cmd/server 1.145s, hnsw 231.499s). Ручной smoke на порту 18081: n=200/dim=8, сборка `idx_fd33405c` за 3 мс, 200 узлов, maxLevel=3, degree max=16/mean=8.16/p50=8; HNSW и bruteforce вернули одинаковый top-5 (recall@5=1.0), trace слои 3→0, после вставки `custom` узел 200 найден с distance=0. Задачи 5.6–5.10 не реализовывались. Отчёт: `docs/reports/2026-10-29_02_backend_etap-5-http-api.md`. |

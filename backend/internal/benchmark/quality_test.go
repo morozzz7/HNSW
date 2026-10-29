@@ -4,7 +4,6 @@ import (
 	"math"
 	"math/rand"
 	"testing"
-	"time"
 
 	"hnsw-coursework/internal/bruteforce"
 	"hnsw-coursework/internal/hnsw"
@@ -73,33 +72,18 @@ func TestHNSWQualityMetrics(t *testing.T) {
 		t.Fatalf("bruteforce.New: %v", err)
 	}
 
-	latencies := make([]float64, 0, queries)
-	recallSum := 0.0
-	for qi, query := range queryVectors {
-		start := time.Now()
-		res, err := idx.Search(query, k, efSearch)
-		if err != nil {
-			t.Fatalf("hnsw search %d: %v", qi, err)
-		}
-		latencies = append(latencies, float64(time.Since(start).Nanoseconds())/1e6)
-
-		exact, err := bf.Search(query, k)
-		if err != nil {
-			t.Fatalf("bruteforce search %d: %v", qi, err)
-		}
-		approx := make([]bruteforce.Result, len(res))
-		for i, it := range res {
-			approx[i] = bruteforce.Result{ID: it.ID, Dist: it.Dist}
-		}
-		recallSum += bruteforce.Recall(exact, approx, k)
+	exact, bfQPS, err := measureExact(bf, queryVectors, k)
+	if err != nil {
+		t.Fatalf("measureExact: %v", err)
 	}
-
-	recall := recallSum / float64(queries)
-	lat := LatencyFromSamples(latencies)
+	lat, recall, err := measureSearch(idx, queryVectors, exact, k, efSearch)
+	if err != nil {
+		t.Fatalf("measureSearch: %v", err)
+	}
 
 	t.Logf("n=%d dim=%d M=16 efC=100 efSearch=%d k=%d queries=%d", n, dim, efSearch, k, queries)
 	t.Logf("build time: %v; index memory: %.1f KiB", buildTime, float64(memBytes)/1024)
-	t.Logf("recall@%d: %.4f", k, recall)
+	t.Logf("recall@%d: %.4f; bruteforce QPS=%.0f", k, recall, bfQPS)
 	t.Logf("latency ms: p50=%.3f p95=%.3f p99=%.3f; QPS=%.0f",
 		lat.P50Ms, lat.P95Ms, lat.P99Ms, lat.QPS)
 
