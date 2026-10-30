@@ -78,7 +78,6 @@ func TestLoadJSONEmpty(t *testing.T) {
 	}
 }
 
-// writeFVecsFile builds an fvecs file with the given vectors and returns the path.
 func writeFVecsFile(t *testing.T, vecs [][]float32) string {
 	t.Helper()
 	var buf bytes.Buffer

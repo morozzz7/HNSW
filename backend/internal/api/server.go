@@ -1,4 +1,3 @@
-// Package api implements the HTTP API described in docs/API.md.
 package api
 
 import (
@@ -17,11 +16,10 @@ const (
 	basePath      = "/api/v1"
 	allowedOrigin = "http://localhost:5173"
 
-	maxJSONBodyBytes = 8 << 20   // 8 MiB for JSON bodies
-	maxUploadBytes   = 256 << 20 // 256 MiB for dataset uploads
+	maxJSONBodyBytes = 8 << 20
+	maxUploadBytes   = 256 << 20
 )
 
-// API error codes (see docs/API.md).
 const (
 	codeInvalidRequest      = "INVALID_REQUEST"
 	codeDatasetNotFound     = "DATASET_NOT_FOUND"
@@ -38,7 +36,6 @@ const (
 	codeInternalError       = "INTERNAL_ERROR"
 )
 
-// apiError is the inner object of the unified error envelope.
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -48,14 +45,12 @@ type errorEnvelope struct {
 	Error apiError `json:"error"`
 }
 
-// Server wires HTTP handlers to the dataset store and index manager.
 type Server struct {
 	store *dataset.Store
 	mgr   *indexmanager.Manager
 	mux   *http.ServeMux
 }
 
-// NewServer creates the API server and registers all routes.
 func NewServer(store *dataset.Store, mgr *indexmanager.Manager) *Server {
 	s := &Server{
 		store: store,
@@ -66,13 +61,10 @@ func NewServer(store *dataset.Store, mgr *indexmanager.Manager) *Server {
 	return s
 }
 
-// Handler returns the fully wrapped HTTP handler (CORS, panic recovery).
 func (s *Server) Handler() http.Handler {
 	return s.withMiddleware(s.mux)
 }
 
-// Routes is an alias for Handler, kept for callers that prefer routing
-// terminology.
 func (s *Server) Routes() http.Handler { return s.Handler() }
 
 func (s *Server) routes() {
@@ -87,8 +79,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST "+basePath+"/vectors", s.handleInsertVector)
 	s.mux.HandleFunc("POST "+basePath+"/search", s.handleSearch)
 
-	// Method-less patterns act as fallbacks for wrong methods on known paths.
-	// Go 1.22 ServeMux prefers the method-specific pattern when it matches.
 	for _, path := range []string{
 		basePath + "/health",
 		basePath + "/datasets",
@@ -142,7 +132,6 @@ func (s *Server) handleMethodNotAllowed(w http.ResponseWriter, _ *http.Request) 
 	writeError(w, http.StatusMethodNotAllowed, codeMethodNotAllowed, "method not allowed")
 }
 
-// writeJSON marshals v and writes it with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
@@ -155,13 +144,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(body)
 }
 
-// writeError writes the unified error envelope.
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, errorEnvelope{Error: apiError{Code: code, Message: message}})
 }
 
-// decodeJSON decodes a single JSON value from the request body and rejects
-// trailing data. It returns a plain error; handlers decide the API code.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	if r.Body == nil {
 		return errors.New("request body is empty")
@@ -177,11 +163,8 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return nil
 }
 
-// FlexID accepts a JSON string or number for vector ids. Responses always use
-// strings, but the contract example shows a numeric vectorId in /search.
 type FlexID string
 
-// UnmarshalJSON implements json.Unmarshaler.
 func (id *FlexID) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
 		*id = ""
@@ -200,10 +183,8 @@ func (id *FlexID) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// String returns the id as a plain string.
 func (id FlexID) String() string { return string(id) }
 
-// writeManagerError maps manager sentinel errors to API error responses.
 func writeManagerError(w http.ResponseWriter, err error, fallbackCode string, fallbackStatus int) {
 	switch {
 	case errors.Is(err, indexmanager.ErrNoIndex):

@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-#
-# scripts/download_sift.sh
-#
-# Downloads a small SIFT subset for experiments (stage 2.8 / stage 10).
-# Large datasets are never committed to the repository; this script fetches
-# them on demand into /tmp/opencode (or $DATASET_DIR).
-#
-# Source: the public SIFT dataset (ftp://ftp.irisa.fr/local/texmex/corpus/sift.tgz)
-# contains sift_base.fvecs (1M x 128), sift_query.fvecs, sift_learn.fvecs and
-# sift_groundtruth.ivecs. We download only a subset by streaming the .fvecs
-# and truncating to the first N vectors.
-#
-# Usage:
-#   ./scripts/download_sift.sh [n_base] [n_queries]   # defaults: 50000 base, 1000 queries
-#
 set -euo pipefail
 
 DATASET_DIR="${DATASET_DIR:-/tmp/opencode/datasets}"
@@ -53,7 +38,6 @@ download() {
     fi
 }
 
-# Read the first n vectors from an .fvecs file (int32 dim + dim float32 per vector).
 take_fvecs() {
     local src="$1" dst="$2" n="$3"
     python3 - "$src" "$dst" "$n" <<'PY'
@@ -91,7 +75,6 @@ main() {
         log "sift/ already extracted, skipping"
     fi
 
-    # Locate sift_base.fvecs / sift_query.fvecs inside the extracted dir.
     BASE_SRC=$(find "$BASE_DIR" -name 'sift_base.fvecs' | head -n1)
     QUERY_SRC=$(find "$BASE_DIR" -name 'sift_query.fvecs' | head -n1)
     if [ -z "$BASE_SRC" ] || [ -z "$QUERY_SRC" ]; then

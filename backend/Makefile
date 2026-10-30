@@ -1,6 +1,3 @@
-# Makefile for the HNSW coursework backend.
-# Module: hnsw-coursework (Go). Server listens on :8080 by default.
-
 GO ?= go
 PORT ?= 8080
 

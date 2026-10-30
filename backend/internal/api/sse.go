@@ -9,8 +9,6 @@ import (
 	"hnsw-coursework/internal/indexmanager"
 )
 
-// sseHeartbeat keeps idle connections alive and lets clients detect a dead
-// server. The content is an SSE comment, ignored by clients.
 const sseHeartbeat = 15 * time.Second
 
 func (s *Server) handleIndexEvents(w http.ResponseWriter, r *http.Request) {
@@ -20,8 +18,6 @@ func (s *Server) handleIndexEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Subscribe before sending headers so no event can be missed between the
-	// state snapshot and the first read from the channel.
 	sub, st := s.mgr.Subscribe()
 	defer s.mgr.Unsubscribe(sub)
 

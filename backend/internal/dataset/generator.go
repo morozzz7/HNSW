@@ -6,9 +6,6 @@ import (
 	"math/rand"
 )
 
-// Generate produces n synthetic vectors of the given dimension using the
-// specified distribution and seed. Supported distributions: "uniform",
-// "gaussian", "clusters".
 func Generate(n, dim int, distribution string, seed int64) ([][]float32, error) {
 	if n <= 0 {
 		return nil, errors.New("generate: n must be positive")
@@ -30,7 +27,6 @@ func Generate(n, dim int, distribution string, seed int64) ([][]float32, error) 
 	}
 }
 
-// genUniform returns n vectors with components uniform in [0, 1).
 func genUniform(r *rand.Rand, n, dim int) [][]float32 {
 	vecs := make([][]float32, n)
 	for i := 0; i < n; i++ {
@@ -43,7 +39,6 @@ func genUniform(r *rand.Rand, n, dim int) [][]float32 {
 	return vecs
 }
 
-// genGaussian returns n vectors with components drawn from N(0, 1).
 func genGaussian(r *rand.Rand, n, dim int) [][]float32 {
 	vecs := make([][]float32, n)
 	for i := 0; i < n; i++ {
@@ -56,9 +51,6 @@ func genGaussian(r *rand.Rand, n, dim int) [][]float32 {
 	return vecs
 }
 
-// genClusters returns n vectors organized into a small number of Gaussian
-// clusters around random centers in [0, 1)^dim. Cluster count defaults to 4
-// (or n if smaller).
 func genClusters(r *rand.Rand, n, dim int) [][]float32 {
 	clusterCount := 4
 	if n < clusterCount {
@@ -74,7 +66,6 @@ func genClusters(r *rand.Rand, n, dim int) [][]float32 {
 		center := centers[i%clusterCount]
 		v := make([]float32, dim)
 		for j := 0; j < dim; j++ {
-			// tight noise so clusters stay separated
 			v[j] = center[j] + float32(0.05*r.NormFloat64())
 		}
 		vecs[i] = v

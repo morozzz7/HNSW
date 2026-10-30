@@ -38,7 +38,6 @@ func TestPCA2DDeterministic(t *testing.T) {
 }
 
 func TestPCA2DConstantVectors(t *testing.T) {
-	// Zero variance: all vectors identical -> projection is all zeros.
 	vectors := [][]float32{{1, 2}, {1, 2}, {1, 2}}
 	coords, err := PCA2D(vectors)
 	if err != nil {
@@ -64,16 +63,14 @@ func TestPCA2DErrors(t *testing.T) {
 }
 
 func TestPCA2DAxisAligned(t *testing.T) {
-	// Variance along x is larger than along y; PC1 should track x.
 	vectors := [][]float32{
-		{0, 0}, {2, 0}, {4, 0}, // spread on x
-		{0, 0}, {0, 1}, {0, 2}, // less spread on y
+		{0, 0}, {2, 0}, {4, 0},
+		{0, 0}, {0, 1}, {0, 2},
 	}
 	coords, err := PCA2D(vectors)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The total spread along PC1 should exceed that along PC2.
 	var spreadX, spreadY float64
 	for _, c := range coords {
 		spreadX += math.Abs(c[0])

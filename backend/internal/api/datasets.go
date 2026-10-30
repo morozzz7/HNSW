@@ -13,8 +13,6 @@ import (
 	"hnsw-coursework/internal/dataset"
 )
 
-// maxGenerateValues caps the number of float components produced by a single
-// generate request to avoid accidental OOM (50M float32 ~= 200 MiB).
 const maxGenerateValues = 50_000_000
 
 type createDatasetResponse struct {

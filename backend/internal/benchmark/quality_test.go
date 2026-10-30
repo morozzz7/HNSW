@@ -9,10 +9,6 @@ import (
 	"hnsw-coursework/internal/hnsw"
 )
 
-// TestHNSWQualityMetrics is an end-to-end check of the Stage 3 quality metrics
-// (tasks 3.2 and 3.3): it builds an HNSW index, measures build time and heap
-// usage, computes recall@k against the exact bruteforce search and collects
-// query latency percentiles. Real numbers are printed with -v.
 func TestHNSWQualityMetrics(t *testing.T) {
 	const (
 		n        = 3000

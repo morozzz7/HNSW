@@ -9,7 +9,6 @@ import (
 	"hnsw-coursework/internal/hnsw"
 )
 
-// dim is the vector dimension used by the benchmark package tests.
 const dim = 8
 
 func mustGenerate(t *testing.T, n, dim int, seed int64) [][]float32 {
@@ -102,8 +101,6 @@ func TestRunGridSmall(t *testing.T) {
 				t.Errorf("row %d: non-finite metric %v", i, v)
 			}
 		}
-		// The measured brute-force QPS and build time are shared by all
-		// efSearch values within one (M, efC, metric, heuristic) group.
 		seen[[2]any{r.M, r.UseHeuristic}] = true
 	}
 	if len(seen) != 4 {

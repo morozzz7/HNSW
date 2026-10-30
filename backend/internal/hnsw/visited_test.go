@@ -20,7 +20,6 @@ func TestVisitedSet(t *testing.T) {
 		t.Fatal("contains should be false for unadded id")
 	}
 
-	// Acquire a new set: generation changes, old marks invalid.
 	v2 := acquireVisitedSet(10)
 	defer releaseVisitedSet(v2)
 	if v2.contains(5) {

@@ -10,7 +10,7 @@
 >
 > **Reports:** after every reasonably global change (finished stage or task group, new module/page/endpoint, architectural decision, major refactoring, benchmark run) the agent writes a report in `docs/reports/` from `docs/reports/TEMPLATE.md` **in Russian**, and links it in the "Change log" and "Reports index". Criteria and rules are in `.opencode/agent/*.md`.
 >
-> **Language:** all files, code and comments in English; UI text and reports in Russian.
+> **Language:** all files and code in English; UI text and reports in Russian. Code comments are not allowed.
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 

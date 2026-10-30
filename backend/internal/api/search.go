@@ -160,10 +160,6 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// outputDistance converts an internal distance to the API representation:
-//   - l2: sqrt(squared L2) => actual Euclidean distance;
-//   - cosine: already 1 - cosine similarity;
-//   - inner_product: negative dot product (smaller means closer).
 func outputDistance(metric hnsw.Metric, d float32) float64 {
 	if metric == hnsw.MetricL2 {
 		return math.Sqrt(float64(d))
@@ -171,8 +167,6 @@ func outputDistance(metric hnsw.Metric, d float32) float64 {
 	return float64(d)
 }
 
-// mapTrace converts the core trace to the API shape. It returns nil when the
-// core returned no trace (e.g. brute-force mode).
 func mapTrace(tr *hnsw.Trace) *traceResponse {
 	if tr == nil {
 		return nil

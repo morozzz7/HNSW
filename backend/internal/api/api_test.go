@@ -27,7 +27,6 @@ const (
 	testSearchK  = 5
 )
 
-// newTestAPI creates an isolated store/manager/server pair.
 func newTestAPI(t *testing.T) (*Server, *indexmanager.Manager) {
 	t.Helper()
 	store := dataset.NewStore()
@@ -453,7 +452,6 @@ func TestIndexBuildStatusStats(t *testing.T) {
 	})
 	expectError(t, rec, http.StatusBadRequest, codeInvalidRequest)
 
-	// Rebuild replaces the previous index.
 	newIndexID := startBuild(t, h, datasetID)
 	if newIndexID == indexID {
 		t.Fatal("rebuild reused the previous index id")
@@ -524,7 +522,6 @@ func TestVectorInsertAndSearchByID(t *testing.T) {
 		t.Fatalf("top distance = %v, want 0", got)
 	}
 
-	// Numeric vectorId must resolve the built dataset's external id "0".
 	rec = doJSON(t, h, http.MethodPost, basePath+"/search", map[string]any{
 		"vectorId": 0, "k": 3, "mode": "hnsw",
 	})
@@ -537,7 +534,6 @@ func TestVectorInsertAndSearchByID(t *testing.T) {
 		t.Fatalf("numeric vectorId top id = %d, want 0", got)
 	}
 
-	// Brute force must see the inserted vector.
 	rec = doJSON(t, h, http.MethodPost, basePath+"/search", map[string]any{
 		"vectorId": "custom", "k": 1, "mode": "bruteforce",
 	})
@@ -561,8 +557,6 @@ func TestSearchModesTraceAndValidation(t *testing.T) {
 	h := srv.Handler()
 	readyIndex(t, h, mgr)
 
-	// Use dataset vector 0 as the query; HNSW and brute force must agree on the
-	// exact top-1 hit (the query itself).
 	meta := decodeMap(t, doJSON(t, h, http.MethodGet, basePath+"/datasets", nil))
 	firstID := meta["datasets"].([]any)[0].(map[string]any)["id"].(string)
 	ds := decodeMap(t, doJSON(t, h, http.MethodGet, basePath+"/datasets/"+firstID, nil))
@@ -790,7 +784,6 @@ func TestIndexEventsSSE(t *testing.T) {
 	}
 	waitReady(t, mgr)
 
-	// A second connection after the build must receive done immediately.
 	resp2, err := http.Get(ts.URL + basePath + "/index/events")
 	if err != nil {
 		t.Fatalf("open ready SSE: %v", err)

@@ -53,7 +53,6 @@ func TestWriteCSV(t *testing.T) {
 		t.Fatalf("header = %v, want %v", records[0], wantHeader)
 	}
 
-	// Stable header: the same columns are produced regardless of k.
 	var other bytes.Buffer
 	otherResults := []Result{{M: 1, EfConstruction: 1, EfSearch: 1, K: 100}}
 	if err := WriteCSV(&other, otherResults); err != nil {

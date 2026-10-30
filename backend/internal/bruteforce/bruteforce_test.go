@@ -56,7 +56,6 @@ func TestSearchExact(t *testing.T) {
 	if len(res) != 2 {
 		t.Fatalf("len = %d, want 2", len(res))
 	}
-	// Distances: id0=0, id1=1, id2=1, id3=18. Ties are broken by id.
 	if res[0].ID != 0 || res[0].Dist != 0 {
 		t.Fatalf("res[0] = {%d, %v}, want {0, 0}", res[0].ID, res[0].Dist)
 	}
@@ -183,7 +182,6 @@ func TestRecall(t *testing.T) {
 		t.Fatalf("recall with k=0 = %v, want 0", got)
 	}
 
-	// Only the exact top-k is considered.
 	longer := append([]Result{{ID: 10, Dist: 6}}, exact...)
 	if got := Recall(longer, approx, 3); math.Abs(got-2.0/3.0) > 1e-9 {
 		t.Fatalf("recall with longer exact list = %v, want %v", got, 2.0/3.0)

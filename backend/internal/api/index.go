@@ -62,7 +62,6 @@ func (s *Server) handleBuildIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve documented defaults for omitted zero values.
 	if req.M < 0 {
 		writeError(w, http.StatusBadRequest, codeInvalidRequest, "M must be positive")
 		return

@@ -45,7 +45,6 @@ func TestLatencyFromSamples(t *testing.T) {
 	if math.Abs(lat.P99Ms-29.8) > 1e-9 {
 		t.Fatalf("P99 = %v, want 29.8", lat.P99Ms)
 	}
-	// mean = 20 ms -> 1000 / 20 = 50 QPS
 	if math.Abs(lat.QPS-50) > 1e-9 {
 		t.Fatalf("QPS = %v, want 50", lat.QPS)
 	}

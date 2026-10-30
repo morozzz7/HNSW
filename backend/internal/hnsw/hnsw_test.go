@@ -36,7 +36,6 @@ func TestInsertAndSearchBasic(t *testing.T) {
 		t.Fatalf("Len = %d, want %d", got, n)
 	}
 
-	// Search for each vector: it should be its own nearest neighbor (distance 0).
 	for i := 0; i < n; i++ {
 		res, err := idx.Search(vecs[i], 1, 100)
 		if err != nil {
@@ -74,7 +73,6 @@ func TestSearchKResults(t *testing.T) {
 	if len(res) != k {
 		t.Fatalf("len = %d, want %d", len(res), k)
 	}
-	// Distances should be non-decreasing.
 	for i := 1; i < len(res); i++ {
 		if res[i].Dist < res[i-1].Dist {
 			t.Fatalf("results not sorted: %v > %v at %d", res[i-1].Dist, res[i].Dist, i)
@@ -137,7 +135,6 @@ func TestGraphInvariants(t *testing.T) {
 
 	stats := idx.Stats()
 
-	// No self-loops.
 	for _, nd := range idx.nodes {
 		for l := 0; l <= nd.maxLevel; l++ {
 			for _, nb := range nd.neighbors[l] {
@@ -148,7 +145,6 @@ func TestGraphInvariants(t *testing.T) {
 		}
 	}
 
-	// Degree <= Mmax at each level.
 	for _, nd := range idx.nodes {
 		for l := 0; l <= nd.maxLevel; l++ {
 			mmax := idx.config.Mmax(l)
@@ -158,7 +154,6 @@ func TestGraphInvariants(t *testing.T) {
 		}
 	}
 
-	// Bidirectional links: if a->b at level l, then b->a at level l.
 	for _, nd := range idx.nodes {
 		for l := 0; l <= nd.maxLevel; l++ {
 			for _, nb := range nd.neighbors[l] {
@@ -176,7 +171,6 @@ func TestGraphInvariants(t *testing.T) {
 		}
 	}
 
-	// Entry point exists at maxLevel.
 	if stats.MaxLevel >= 0 {
 		ep := idx.nodes[stats.EntryPoint]
 		if ep.maxLevel < stats.MaxLevel {
@@ -184,8 +178,6 @@ func TestGraphInvariants(t *testing.T) {
 				stats.EntryPoint, ep.maxLevel, stats.MaxLevel)
 		}
 		if !containsUint32(ep.neighbors[stats.MaxLevel], stats.EntryPoint) && stats.MaxLevel > 0 {
-			// Entry point at maxLevel may or may not have neighbors at that level,
-			// but it must exist at that level (it does since maxLevel <= ep.maxLevel).
 			_ = ep
 		}
 	}
@@ -219,13 +211,11 @@ func TestSearchWithTrace(t *testing.T) {
 	if len(trace.Layers) == 0 {
 		t.Fatal("trace has no layers")
 	}
-	// Layer 0 should be present.
 	hasLayer0 := false
 	for _, lt := range trace.Layers {
 		if lt.Level == 0 {
 			hasLayer0 = true
 			if lt.Closest == 0 && len(res) > 0 {
-				// Closest should be a valid node id.
 				if int(lt.Closest) >= len(idx.nodes) {
 					t.Fatalf("trace closest %d out of range", lt.Closest)
 				}
@@ -235,7 +225,6 @@ func TestSearchWithTrace(t *testing.T) {
 	if !hasLayer0 {
 		t.Fatal("trace missing layer 0")
 	}
-	// Every visited id must be valid.
 	for _, lt := range trace.Layers {
 		for _, id := range lt.Visited {
 			if int(id) >= len(idx.nodes) {
@@ -246,7 +235,6 @@ func TestSearchWithTrace(t *testing.T) {
 }
 
 func TestQualityRecall(t *testing.T) {
-	// Quality test: recall@10 >= 0.95 on 10k random vectors with M=16, efC=200, efSearch=100.
 	cfg := defaultConfig()
 	cfg.Seed = 2026
 	cfg.M = 16
@@ -265,13 +253,11 @@ func TestQualityRecall(t *testing.T) {
 		}
 	}
 
-	// Brute-force ground truth for 100 random queries.
 	qCount := 100
 	recallSum := 0.0
 	for q := 0; q < qCount; q++ {
 		query := randVec(r, dim)
 
-		// Brute force: top 10 by squared L2.
 		type cand struct {
 			id   uint32
 			dist float32
@@ -292,7 +278,6 @@ func TestQualityRecall(t *testing.T) {
 			gtSet[gt[i].id] = true
 		}
 
-		// HNSW search.
 		res, err := idx.Search(query, 10, 100)
 		if err != nil {
 			t.Fatalf("search %d: %v", q, err)

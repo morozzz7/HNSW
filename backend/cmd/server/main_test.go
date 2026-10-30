@@ -13,7 +13,6 @@ func TestRunStartsAndShutsDown(t *testing.T) {
 		done <- run(ctx, "0")
 	}()
 
-	// Let the listener start, then cancel the context as a shutdown signal.
 	time.Sleep(100 * time.Millisecond)
 	cancel()
 

@@ -11,12 +11,6 @@ import (
 	"hnsw-coursework/internal/hnsw"
 )
 
-// GridConfig describes a parameter sweep over HNSW build and search
-// parameters. Vectors and Queries must have the same dimension; every result
-// row is produced for the same query set and the same k.
-//
-// Empty parameter slices are replaced with defaults (see withDefaults), so a
-// caller can sweep a single dimension, e.g. only EfSearch.
 type GridConfig struct {
 	Vectors           [][]float32
 	Queries           [][]float32
@@ -27,20 +21,10 @@ type GridConfig struct {
 	UseHeuristic      []bool
 	K                 int
 	Seed              int64
-	BruteforceWorkers int // brute-force parallelism for the ground truth; <= 1 = sequential
-	// Progress, when set, is called with the number of completed rows and the
-	// total number of rows. It is called once with done=0 before the first row
-	// and after every completed row. Used by the HTTP benchmark endpoint (SSE).
-	Progress func(done, total int)
+	BruteforceWorkers int
+	Progress          func(done, total int)
 }
 
-// Result is one row of a parameter grid run. It carries everything needed by
-// the POST /benchmark response (see docs/API.md) as well as the neighbour
-// selection mode and metric for the Chapter 3 comparisons.
-//
-// Recall is serialized under a dynamic "recall@<k>" key (e.g. "recall@10")
-// because the API contract names it after k. CSV export uses a stable
-// "recall" column instead (see WriteCSV).
 type Result struct {
 	M              int         `json:"M"`
 	EfConstruction int         `json:"efConstruction"`
@@ -58,8 +42,6 @@ type Result struct {
 	Speedup        float64     `json:"speedup"`
 }
 
-// MarshalJSON emits the API field names, including "recall@<k>". The encoding
-// of a Go map sorts keys, so the output is deterministic.
 func (r Result) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"M":              r.M,
@@ -79,8 +61,6 @@ func (r Result) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// recallKey returns the JSON key for recall: "recall@<k>" to match the API
-// contract, or plain "recall" if k is not positive.
 func recallKey(k int) string {
 	if k <= 0 {
 		return "recall"
@@ -88,15 +68,11 @@ func recallKey(k int) string {
 	return "recall@" + strconv.Itoa(k)
 }
 
-// exactTable is the per-metric brute-force ground truth plus the QPS measured
-// while computing it. It is shared by all grid rows that use the same metric.
 type exactTable struct {
 	results [][]bruteforce.Result
 	qps     float64
 }
 
-// withDefaults fills empty parameter slices and a zero K with sensible values.
-// It does not validate the config.
 func (c GridConfig) withDefaults() GridConfig {
 	if len(c.M) == 0 {
 		c.M = []int{16}
@@ -119,7 +95,6 @@ func (c GridConfig) withDefaults() GridConfig {
 	return c
 }
 
-// validate checks the dataset, the query set and all grid parameters.
 func (c GridConfig) validate() error {
 	if len(c.Vectors) == 0 {
 		return fmt.Errorf("grid: no vectors")
@@ -166,7 +141,6 @@ func (c GridConfig) validate() error {
 	return nil
 }
 
-// validMetric reports whether m is one of the supported hnsw metrics.
 func validMetric(m hnsw.Metric) bool {
 	switch m {
 	case hnsw.MetricL2, hnsw.MetricCosine, hnsw.MetricInnerProduct:
@@ -176,13 +150,6 @@ func validMetric(m hnsw.Metric) bool {
 	}
 }
 
-// RunGrid builds an index for every (M, efConstruction, metric, heuristic)
-// combination and queries it with every efSearch value. For one combination
-// the index is built once and reused across efSearch values.
-//
-// The exact k-NN ground truth is computed with bruteforce once per metric and
-// shared by all rows with that metric. Results are returned in a deterministic
-// order: M, efConstruction, metric, heuristic, efSearch.
 func RunGrid(cfg GridConfig) ([]Result, error) {
 	cfg = cfg.withDefaults()
 	if err := cfg.validate(); err != nil {
@@ -269,8 +236,6 @@ func RunGrid(cfg GridConfig) ([]Result, error) {
 	return results, nil
 }
 
-// buildExactTables computes exact k-NN results and measures brute-force QPS for
-// each distinct metric in the grid.
 func buildExactTables(cfg GridConfig) (map[hnsw.Metric]exactTable, error) {
 	tables := make(map[hnsw.Metric]exactTable, len(cfg.Metric))
 	for _, metric := range cfg.Metric {
@@ -290,23 +255,11 @@ func buildExactTables(cfg GridConfig) (map[hnsw.Metric]exactTable, error) {
 	return tables, nil
 }
 
-// Timing calibration. Some platforms (notably Windows and virtualized
-// environments) expose a coarse clock where a single fast query measures as
-// zero. To keep QPS and latency meaningful, each sample is the average over
-// enough back-to-back invocations to reach minSampleDuration. On machines with
-// a precise clock a single invocation is usually enough.
 const (
 	minSampleDuration  = time.Millisecond
 	maxCalibrationReps = 4096
 )
 
-// calibrateReps finds how many back-to-back calls of run are needed for one
-// measured sample to exceed minSampleDuration. It doubles the repetition count
-// and stops at maxCalibrationReps. The minimum of several trials is used (not
-// the median): on a coarse clock an individual fast operation may accidentally
-// straddle a clock tick and look much longer than it is, but requiring every
-// trial to reach the threshold guarantees that the sample is long enough for
-// the clock to advance reliably.
 func calibrateReps(run func() error) (int, error) {
 	const trials = 5
 	reps := 1
@@ -330,8 +283,6 @@ func calibrateReps(run func() error) (int, error) {
 	}
 }
 
-// measureExact runs exact searches for all queries, returning the per-query
-// results and the brute-force QPS derived from the measured latencies.
 func measureExact(bf *bruteforce.Index, queries [][]float32, k int) ([][]bruteforce.Result, float64, error) {
 	if len(queries) == 0 {
 		return nil, 0, nil
@@ -362,8 +313,6 @@ func measureExact(bf *bruteforce.Index, queries [][]float32, k int) ([][]brutefo
 	return exact, LatencyFromSamples(samples).QPS, nil
 }
 
-// measureSearch runs approximate searches for all queries, returning latency
-// statistics and the mean recall@k against the provided exact results.
 func measureSearch(idx *hnsw.Index, queries [][]float32, exact [][]bruteforce.Result, k, efSearch int) (Latency, float64, error) {
 	if len(queries) == 0 {
 		return Latency{}, 0, nil
@@ -399,7 +348,6 @@ func measureSearch(idx *hnsw.Index, queries [][]float32, exact [][]bruteforce.Re
 	return LatencyFromSamples(samples), recallSum / float64(len(queries)), nil
 }
 
-// elapsedMs returns the time elapsed since start in milliseconds.
 func elapsedMs(start time.Time) float64 {
 	return float64(time.Since(start)) / float64(time.Millisecond)
 }

@@ -1,9 +1,3 @@
-// Package benchmark provides quality metrics and experiment runners for
-// approximate nearest neighbor search: query latency percentiles (p50/p95/p99),
-// QPS, index build time and heap memory usage, a parameter-grid runner
-// (RunGrid) that compares HNSW against exact brute-force search, a scaling
-// runner (RunScaling) for query time versus dataset size, and JSON/CSV export
-// of the results (WriteJSON, WriteCSV).
 package benchmark
 
 import (
@@ -13,16 +7,13 @@ import (
 	"time"
 )
 
-// Latency summarizes query latency statistics in milliseconds.
 type Latency struct {
 	P50Ms float64
 	P95Ms float64
 	P99Ms float64
-	QPS   float64 // queries per second, derived from the mean latency
+	QPS   float64
 }
 
-// Percentile returns the p-th percentile (0 <= p <= 1) of samples using linear
-// interpolation between the two closest ranks. An empty slice yields 0.
 func Percentile(samples []float64, p float64) float64 {
 	if len(samples) == 0 {
 		return 0
@@ -48,8 +39,6 @@ func Percentile(samples []float64, p float64) float64 {
 	return s[lo] + (s[hi]-s[lo])*frac
 }
 
-// LatencyFromSamples computes latency statistics from per-query samples given
-// in milliseconds. QPS is derived from the mean latency: 1000 / meanMs.
 func LatencyFromSamples(samples []float64) Latency {
 	if len(samples) == 0 {
 		return Latency{}
@@ -72,8 +61,6 @@ func LatencyFromSamples(samples []float64) Latency {
 	return l
 }
 
-// MeasureBuildTime runs build and returns how long it took. If build fails, the
-// elapsed time is returned together with the error.
 func MeasureBuildTime(build func() error) (time.Duration, error) {
 	start := time.Now()
 	if err := build(); err != nil {
@@ -82,10 +69,6 @@ func MeasureBuildTime(build func() error) (time.Duration, error) {
 	return time.Since(start), nil
 }
 
-// HeapInUse returns the heap memory currently in use, in bytes, after forcing a
-// garbage collection. Measure an index footprint as
-// HeapInUse()-before vs HeapInUse()-after building it, keeping the built index
-// reachable (e.g. in a variable captured by the closure).
 func HeapInUse() int64 {
 	runtime.GC()
 	var m runtime.MemStats

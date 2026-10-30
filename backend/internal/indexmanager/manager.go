@@ -1,12 +1,3 @@
-// Package indexmanager owns the lifecycle of the HNSW index exposed through
-// the HTTP API. It keeps the current index, its dataset vectors, the
-// external-id <-> internal-id mapping, a brute-force counterpart for exact
-// search, and the asynchronous build state together with SSE subscribers.
-//
-// The manager serialises mutating operations (build, insert) against searches
-// with a single RWMutex. The lock order is manager -> hnsw.Index; the build
-// goroutine touches the fresh hnsw.Index before it is published, so no other
-// goroutine can observe a partially built index.
 package indexmanager
 
 import (
@@ -27,7 +18,6 @@ import (
 	"hnsw-coursework/internal/hnsw"
 )
 
-// Status is the lifecycle state of the current index.
 type Status string
 
 const (
@@ -37,34 +27,22 @@ const (
 	StatusError    Status = "error"
 )
 
-// Event types published over SSE.
 const (
 	EventProgress = "progress"
 	EventDone     = "done"
 	EventError    = "error"
 )
 
-// Sentinel errors returned by the manager. HTTP handlers map them to the
-// documented API error codes.
 var (
-	// ErrNoIndex means no index has been built yet (status idle).
-	ErrNoIndex = errors.New("index: no index built")
-	// ErrNotReady means the index is building or in an error state.
-	ErrNotReady = errors.New("index: not ready")
-	// ErrBuildInProgress is returned when a second build is requested while
-	// the first one is still running. The API rejects it with 409.
+	ErrNoIndex         = errors.New("index: no index built")
+	ErrNotReady        = errors.New("index: not ready")
 	ErrBuildInProgress = errors.New("index: build already in progress")
-	// ErrDatasetNotFound means the requested dataset id is unknown.
 	ErrDatasetNotFound = errors.New("index: dataset not found")
-	// ErrDuplicateID means the external vector id is already present.
-	ErrDuplicateID = errors.New("index: duplicate vector id")
-	// ErrDimension means a vector does not match the index dimension.
-	ErrDimension = errors.New("index: vector dimension mismatch")
-	// ErrInvalid wraps invalid build parameters.
-	ErrInvalid = errors.New("index: invalid build config")
+	ErrDuplicateID     = errors.New("index: duplicate vector id")
+	ErrDimension       = errors.New("index: vector dimension mismatch")
+	ErrInvalid         = errors.New("index: invalid build config")
 )
 
-// BuildConfig describes an asynchronous index build request.
 type BuildConfig struct {
 	DatasetID      string
 	M              int
@@ -75,7 +53,6 @@ type BuildConfig struct {
 	Seed           int64
 }
 
-// State is a snapshot of the manager state for GET /index/status.
 type State struct {
 	Status    Status
 	Progress  float64
@@ -86,33 +63,25 @@ type State struct {
 	Error     string
 }
 
-// Event is one SSE message published to subscribers. Data is a struct with
-// JSON tags (see ProgressData, DoneData, ErrorData).
 type Event struct {
 	Type string
 	Data any
 }
 
-// ProgressData is the payload of a "progress" SSE event.
 type ProgressData struct {
 	Progress  float64 `json:"progress"`
 	Processed int     `json:"processed"`
 	Total     int     `json:"total"`
 }
 
-// DoneData is the payload of a "done" SSE event.
 type DoneData struct {
 	IndexID string `json:"indexId"`
 }
 
-// ErrorData is the payload of an "error" SSE event.
 type ErrorData struct {
 	Message string `json:"message"`
 }
 
-// Subscription is a live SSE subscriber. C delivers events; Done is closed by
-// Manager.Close so handlers exit promptly on shutdown. The handler also stops
-// on request cancellation or after a terminal (done/error) event.
 type Subscription struct {
 	C    <-chan Event
 	Done <-chan struct{}
@@ -120,7 +89,6 @@ type Subscription struct {
 	done chan struct{}
 }
 
-// SearchResult is one search hit with both id spaces and the stored vector.
 type SearchResult struct {
 	Internal uint32
 	VectorID string
@@ -128,7 +96,6 @@ type SearchResult struct {
 	Vector   []float32
 }
 
-// DegreeDistribution summarizes the graph degree histogram.
 type DegreeDistribution struct {
 	Min  int
 	Max  int
@@ -136,7 +103,6 @@ type DegreeDistribution struct {
 	P50  int
 }
 
-// Stats is a snapshot of the ready index for GET /index/stats.
 type Stats struct {
 	Nodes              int
 	MaxLevel           int
@@ -150,7 +116,6 @@ type Stats struct {
 	DatasetID          string
 }
 
-// Manager holds the current index and its build state.
 type Manager struct {
 	mu    sync.RWMutex
 	store *dataset.Store
@@ -160,8 +125,8 @@ type Manager struct {
 	datasetID   string
 	idx         *hnsw.Index
 	bf          *bruteforce.Index
-	vectors     [][]float32 // internal id -> vector
-	extIDs      []string    // internal id -> external id
+	vectors     [][]float32
+	extIDs      []string
 	extToInt    map[string]uint32
 	nextExt     int
 	metric      hnsw.Metric
@@ -171,12 +136,11 @@ type Manager struct {
 	startedAt   time.Time
 	elapsedMs   int64
 	lastErr     string
-	buildCancel context.CancelFunc // non-nil while building
+	buildCancel context.CancelFunc
 	subs        map[*Subscription]struct{}
 	closed      bool
 }
 
-// New creates an idle manager attached to the dataset store.
 func New(store *dataset.Store) *Manager {
 	return &Manager{
 		store:    store,
@@ -186,9 +150,6 @@ func New(store *dataset.Store) *Manager {
 	}
 }
 
-// StartBuild validates the request, resets the previous index and starts an
-// asynchronous build. A second concurrent build is rejected with
-// ErrBuildInProgress; rebuilding a ready index is allowed and replaces it.
 func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 	if cfg.DatasetID == "" {
 		return "", fmt.Errorf("%w: datasetId is required", ErrInvalid)
@@ -236,8 +197,6 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 	}
 	idx := hnsw.New(hcfg)
 
-	// Own copies of the outer slice so later inserts never write into the
-	// dataset's backing array. Inner vectors are immutable and shared.
 	vectors := make([][]float32, len(ds.Vectors))
 	copy(vectors, ds.Vectors)
 	extIDs := make([]string, len(vectors))
@@ -254,7 +213,7 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 	m.status = StatusBuilding
 	m.indexID = indexID
 	m.datasetID = cfg.DatasetID
-	m.idx = nil // previous index is reset: searches return INDEX_NOT_READY
+	m.idx = nil
 	m.bf = nil
 	m.vectors = vectors
 	m.extIDs = extIDs
@@ -278,8 +237,6 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 	return indexID, nil
 }
 
-// build inserts vectors one by one, updates progress and finally publishes a
-// ready index. The index is not visible to searches until finishBuild.
 func (m *Manager) build(ctx context.Context, idx *hnsw.Index, vectors [][]float32, indexID string) {
 	total := len(vectors)
 	step := total / 100
@@ -365,7 +322,6 @@ func (m *Manager) failBuild(indexID, message string) {
 	m.publishLocked(Event{Type: EventError, Data: ErrorData{Message: message}})
 }
 
-// Close cancels an in-flight build. It is called on server shutdown.
 func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -382,7 +338,6 @@ func (m *Manager) Close() {
 	}
 }
 
-// Status returns the current build state snapshot.
 func (m *Manager) Status() State {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -405,14 +360,12 @@ func (m *Manager) stateLocked() State {
 	}
 }
 
-// Len returns the number of vectors in the current index (0 while idle).
 func (m *Manager) Len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.vectors)
 }
 
-// Dim returns the vector dimension of the current index.
 func (m *Manager) Dim() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -425,14 +378,12 @@ func (m *Manager) Dim() int {
 	return 0
 }
 
-// Metric returns the distance metric of the current index.
 func (m *Manager) Metric() hnsw.Metric {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.metric
 }
 
-// VectorByID resolves an external id to its stored vector.
 func (m *Manager) VectorByID(id string) ([]float32, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -446,9 +397,6 @@ func (m *Manager) VectorByID(id string) ([]float32, bool) {
 	return m.vectors[internal], true
 }
 
-// HNSWSearch runs an approximate search and maps internal ids to external ids.
-// The caller must have verified that the index is ready; ErrNoIndex/ErrNotReady
-// are still returned for races with a rebuild.
 func (m *Manager) HNSWSearch(q []float32, k, ef int, trace bool) ([]SearchResult, *hnsw.Trace, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -475,7 +423,6 @@ func (m *Manager) HNSWSearch(q []float32, k, ef int, trace bool) ([]SearchResult
 	return m.mapResultsLocked(raw), tr, nil
 }
 
-// BruteForceSearch runs an exact search over the same vector set.
 func (m *Manager) BruteForceSearch(q []float32, k int) ([]SearchResult, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -501,9 +448,6 @@ func (m *Manager) BruteForceSearch(q []float32, k int) ([]SearchResult, error) {
 	return out, nil
 }
 
-// InsertVector inserts one vector into a ready index. When vectorID is empty,
-// a unique "ext_<n>" id is assigned. The brute-force counterpart and the id
-// maps are updated atomically with the HNSW insert.
 func (m *Manager) InsertVector(vector []float32, vectorID string) (uint32, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -526,8 +470,6 @@ func (m *Manager) InsertVector(vector []float32, vectorID string) (uint32, strin
 		return 0, "", fmt.Errorf("%w: %q", ErrDuplicateID, vectorID)
 	}
 
-	// Build the brute-force snapshot before mutating the HNSW index so that a
-	// failure leaves the manager in a consistent state.
 	snapshot := make([][]float32, len(m.vectors)+1)
 	copy(snapshot, m.vectors)
 	snapshot[len(m.vectors)] = vector
@@ -548,7 +490,6 @@ func (m *Manager) InsertVector(vector []float32, vectorID string) (uint32, strin
 	return internal, vectorID, nil
 }
 
-// Stats returns a structural snapshot of the ready index.
 func (m *Manager) Stats() (Stats, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -570,8 +511,6 @@ func (m *Manager) Stats() (Stats, error) {
 	}, nil
 }
 
-// Subscribe registers an SSE subscriber and returns the current state snapshot
-// atomically (no event can be missed between subscribing and reading state).
 func (m *Manager) Subscribe() (*Subscription, State) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -582,7 +521,6 @@ func (m *Manager) Subscribe() (*Subscription, State) {
 	return sub, m.stateLocked()
 }
 
-// Unsubscribe removes a subscriber.
 func (m *Manager) Unsubscribe(sub *Subscription) {
 	if sub == nil {
 		return
@@ -592,9 +530,6 @@ func (m *Manager) Unsubscribe(sub *Subscription) {
 	m.mu.Unlock()
 }
 
-// publishLocked sends ev to every subscriber without blocking the build. A
-// full buffer drops progress events; terminal events make room by discarding
-// the oldest buffered event.
 func (m *Manager) publishLocked(ev Event) {
 	for sub := range m.subs {
 		select {
@@ -603,7 +538,6 @@ func (m *Manager) publishLocked(ev Event) {
 			if ev.Type == EventProgress {
 				continue
 			}
-			// Make room for a terminal event.
 			select {
 			case <-sub.ch:
 			default:
@@ -669,9 +603,6 @@ func validMetric(m hnsw.Metric) bool {
 	}
 }
 
-// degreeDistribution summarizes a degree histogram: min/max/mean degree and
-// the nearest-rank median (p50). The histogram includes every (node, level)
-// pair present in the graph.
 func degreeDistribution(hist map[int]int) DegreeDistribution {
 	if len(hist) == 0 {
 		return DegreeDistribution{}
@@ -718,7 +649,6 @@ func degreeDistribution(hist map[int]int) DegreeDistribution {
 	}
 }
 
-// newIndexID returns a short random id such as "idx_1a2b3c4d".
 func newIndexID() string {
 	var b [4]byte
 	if _, err := crand.Read(b[:]); err == nil {

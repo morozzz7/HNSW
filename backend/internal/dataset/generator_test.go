@@ -20,7 +20,6 @@ func TestGenerateUniform(t *testing.T) {
 			}
 		}
 	}
-	// Determinism: same seed => same vectors.
 	vecs2, err := Generate(100, 5, "uniform", 1)
 	if err != nil {
 		t.Fatal(err)

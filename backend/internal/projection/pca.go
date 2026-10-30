@@ -7,9 +7,6 @@ import (
 	"sync"
 )
 
-// PCA2D projects vectors onto their first two principal components.
-// It returns one [2]float64 coordinate per vector (x = projection on PC1,
-// y = projection on PC2). Coordinates are centered (zero mean).
 func PCA2D(vectors [][]float32) ([][2]float64, error) {
 	n := len(vectors)
 	if n == 0 {
@@ -25,7 +22,6 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 		}
 	}
 
-	// 1. Column means.
 	mean := make([]float64, dim)
 	for _, v := range vectors {
 		for j, x := range v {
@@ -36,7 +32,6 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 		mean[j] /= float64(n)
 	}
 
-	// 2. Centered data.
 	centered := make([][]float64, n)
 	for i, v := range vectors {
 		c := make([]float64, dim)
@@ -46,14 +41,13 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 		centered[i] = c
 	}
 
-	// 3. Covariance matrix (dim x dim), symmetric.
 	cov := make([][]float64, dim)
 	for i := range cov {
 		cov[i] = make([]float64, dim)
 	}
 	divisor := float64(n)
 	if n > 1 {
-		divisor = float64(n - 1) // sample covariance
+		divisor = float64(n - 1)
 	}
 	for i := 0; i < dim; i++ {
 		for j := i; j < dim; j++ {
@@ -67,10 +61,8 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 		}
 	}
 
-	// 4. Eigen-decomposition of the symmetric covariance matrix (Jacobi).
 	_, eigenvectors := jacobiSymmetric(cov)
 
-	// 5. Project onto the top-2 eigenvectors (largest eigenvalues).
 	k := 2
 	if dim < k {
 		k = dim
@@ -93,17 +85,12 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 	return coords, nil
 }
 
-// jacobiSymmetric computes the eigendecomposition of a symmetric matrix using
-// the Jacobi eigenvalue algorithm. Returns eigenvalues sorted in descending
-// order and eigenvectors as columns (eigenvectors[i] is the i-th eigenvector).
 func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 	n := len(a)
-	// Working copy.
 	b := make([][]float64, n)
 	for i := range b {
 		b[i] = append([]float64{}, a[i]...)
 	}
-	// Eigenvector accumulator (identity).
 	v := make([][]float64, n)
 	for i := range v {
 		v[i] = make([]float64, n)
@@ -117,7 +104,6 @@ func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 
 	const maxIter = 50
 	for iter := 0; iter < maxIter; iter++ {
-		// Off-diagonal energy.
 		var sm float64
 		for p := 0; p < n; p++ {
 			for q := p + 1; q < n; q++ {
@@ -125,7 +111,7 @@ func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 			}
 		}
 		if sm == 0 {
-			break // converged: b is diagonal
+			break
 		}
 
 		var tresh float64
@@ -160,7 +146,6 @@ func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 					d[q] += h
 					b[p][q] = 0
 
-					// Rotate rows/columns of b.
 					for j := 0; j < p; j++ {
 						rotateSym(b, j, p, j, q, c, s, tau)
 					}
@@ -170,7 +155,6 @@ func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 					for j := q + 1; j < n; j++ {
 						rotateSym(b, p, j, q, j, c, s, tau)
 					}
-					// Rotate columns of v (eigenvectors).
 					for j := 0; j < n; j++ {
 						rotateSym(v, j, p, j, q, c, s, tau)
 					}
@@ -183,7 +167,6 @@ func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 		}
 	}
 
-	// Sort eigenvalues descending, reordering eigenvector columns accordingly.
 	order := make([]int, n)
 	for i := range order {
 		order[i] = i
@@ -200,7 +183,6 @@ func jacobiSymmetric(a [][]float64) ([]float64, [][]float64) {
 	return sortedD, sortedV
 }
 
-// rotateSym applies the Jacobi rotation to entries a[i][j] and a[k][l].
 func rotateSym(a [][]float64, i, j, k, l int, c, s, tau float64) {
 	g := a[i][j]
 	h := a[k][l]
@@ -208,20 +190,15 @@ func rotateSym(a [][]float64, i, j, k, l int, c, s, tau float64) {
 	a[k][l] = h + s*(g-h*tau)
 }
 
-// Cache is a small thread-safe cache of PCA projections keyed by dataset id.
-// It is populated after an index is built (Stage 5 wires it in) and consumed
-// by the /graph endpoint for 2D coordinates.
 type Cache struct {
 	mu    sync.RWMutex
 	items map[string][][2]float64
 }
 
-// NewCache creates an empty PCA cache.
 func NewCache() *Cache {
 	return &Cache{items: make(map[string][][2]float64)}
 }
 
-// Get returns the cached coordinates for key, or nil if absent.
 func (c *Cache) Get(key string) ([][2]float64, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -229,14 +206,12 @@ func (c *Cache) Get(key string) ([][2]float64, bool) {
 	return v, ok
 }
 
-// Set stores coordinates under key.
 func (c *Cache) Set(key string, coords [][2]float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.items[key] = coords
 }
 
-// Delete removes the entry for key.
 func (c *Cache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

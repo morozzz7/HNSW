@@ -70,11 +70,9 @@ func TestNewDatasetStatsAndPreview(t *testing.T) {
 	if ds.Stats == nil {
 		t.Fatal("stats is nil")
 	}
-	// mean of column 0 = (0+2+4+6+8+10)/6 = 5
 	if ds.Stats.Mean[0] != 5 {
 		t.Fatalf("mean[0] = %v, want 5", ds.Stats.Mean[0])
 	}
-	// min col 0 = 0, max col 1 = 10
 	if ds.Stats.Min[0] != 0 || ds.Stats.Max[1] != 10 {
 		t.Fatalf("min/max = %v %v", ds.Stats.Min, ds.Stats.Max)
 	}

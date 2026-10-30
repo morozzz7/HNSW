@@ -1,4 +1,3 @@
-// Package dataset provides loaders for CSV, JSON and .fvecs/.ivecs vector files.
 package dataset
 
 import (
@@ -16,13 +15,10 @@ import (
 	"strings"
 )
 
-// LoadCSV reads vectors from a CSV reader.
-// Each data row must contain the same number of float fields. If the first row
-// contains any non-float field it is treated as a header and skipped.
 func LoadCSV(r io.Reader) ([][]float32, error) {
 	reader := csv.NewReader(r)
 	reader.LazyQuotes = true
-	reader.FieldsPerRecord = -1 // allow variable-length records during read
+	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("csv: %w", err)
@@ -33,7 +29,7 @@ func LoadCSV(r io.Reader) ([][]float32, error) {
 
 	start := 0
 	if !isFloatRow(records[0]) {
-		start = 1 // header row
+		start = 1
 	}
 	if start >= len(records) {
 		return nil, errors.New("csv: header row present but no data rows")
@@ -59,10 +55,6 @@ func LoadCSV(r io.Reader) ([][]float32, error) {
 	return vectors, nil
 }
 
-// LoadJSON reads vectors from a JSON reader.
-// Accepted top-level shapes:
-//   - a bare array of arrays: [[1,2], [3,4]]
-//   - an object with a "vectors" field: {"vectors": [[1,2], [3,4]]}
 func LoadJSON(r io.Reader) ([][]float32, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -73,13 +65,11 @@ func LoadJSON(r io.Reader) ([][]float32, error) {
 		return nil, errors.New("json: empty document")
 	}
 
-	// Bare array of arrays.
 	var bare [][]float64
 	if err := json.Unmarshal(data, &bare); err == nil && len(bare) > 0 {
 		return toFloat32(bare), nil
 	}
 
-	// Object wrapper.
 	var wrapper struct {
 		Vectors [][]float64 `json:"vectors"`
 	}
@@ -92,8 +82,6 @@ func LoadJSON(r io.Reader) ([][]float32, error) {
 	return toFloat32(wrapper.Vectors), nil
 }
 
-// LoadFile dispatches to the loader matching the file extension.
-// Supported extensions: .csv, .json, .fvecs, .ivecs.
 func LoadFile(path string) ([][]float32, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
@@ -128,7 +116,6 @@ func loadPathJSON(path string) ([][]float32, error) {
 	return LoadJSON(f)
 }
 
-// isFloatRow reports whether every field in the row parses as a float.
 func isFloatRow(row []string) bool {
 	if len(row) == 0 {
 		return false
@@ -141,7 +128,6 @@ func isFloatRow(row []string) bool {
 	return true
 }
 
-// toFloat32 converts [][]float64 to [][]float32.
 func toFloat32(src [][]float64) [][]float32 {
 	out := make([][]float32, len(src))
 	for i, row := range src {
@@ -153,9 +139,6 @@ func toFloat32(src [][]float64) [][]float32 {
 	return out
 }
 
-// loadBinary reads an .fvecs or .ivecs file.
-// Format: repeated records of int32 dimension followed by `dim` elements
-// (float32 for .fvecs, int32 for .ivecs). All records must share a dimension.
 func loadBinary(path string, isIVecs bool) ([][]float32, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

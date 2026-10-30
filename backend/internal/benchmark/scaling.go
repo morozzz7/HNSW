@@ -10,14 +10,6 @@ import (
 	"hnsw-coursework/internal/hnsw"
 )
 
-// ScalingConfig describes a query-time-vs-dataset-size experiment (task 4.5).
-// For every N in N a fresh synthetic dataset is generated with the same seed and
-// distribution, an index is built, and the same query set is searched with
-// brute force and with HNSW.
-//
-// UseHeuristic selects Algorithm 4 (true) or Algorithm 3 (false) for neighbour
-// selection; the zero value means simple selection, so callers that want the
-// default heuristic behaviour should start from DefaultScalingConfig().
 type ScalingConfig struct {
 	N                 []int
 	Dim               int
@@ -29,13 +21,11 @@ type ScalingConfig struct {
 	Metric            hnsw.Metric
 	UseHeuristic      bool
 	Seed              int64
-	Distribution      string // uniform | gaussian | clusters
-	BruteforceWorkers int    // <= 1 = sequential
-	// Progress, when set, is called after every completed N with (done, total).
-	Progress func(done, total int)
+	Distribution      string
+	BruteforceWorkers int
+	Progress          func(done, total int)
 }
 
-// ScalingResult is one row of a scaling run: the measured cost at a given N.
 type ScalingResult struct {
 	N              int         `json:"n"`
 	Dim            int         `json:"dim"`
@@ -56,7 +46,6 @@ type ScalingResult struct {
 	Speedup        float64     `json:"speedup"`
 }
 
-// MarshalJSON emits "recall@<k>" like Result.MarshalJSON.
 func (r ScalingResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"n":              r.N,
@@ -79,12 +68,6 @@ func (r ScalingResult) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// DefaultScalingConfig returns the default scaling experiment: 1k, 10k, 100k and
-// 1M vectors, 16 dimensions, 100 queries, k=10, M=16, efConstruction=200,
-// efSearch=100, heuristic neighbour selection, uniform distribution.
-//
-// The 1M point is expensive (index build and exact ground truth). Callers that
-// need a bounded run should override N and QueryCount.
 func DefaultScalingConfig() ScalingConfig {
 	return ScalingConfig{
 		N:              []int{1_000, 10_000, 100_000, 1_000_000},
@@ -101,9 +84,6 @@ func DefaultScalingConfig() ScalingConfig {
 	}
 }
 
-// withDefaults fills zero values. N, Dim, QueryCount, K, EfSearch, M and
-// EfConstruction get the DefaultScalingConfig values; Metric and Distribution
-// fall back to L2 and "uniform".
 func (c ScalingConfig) withDefaults() ScalingConfig {
 	def := DefaultScalingConfig()
 	if len(c.N) == 0 {
@@ -136,7 +116,6 @@ func (c ScalingConfig) withDefaults() ScalingConfig {
 	return c
 }
 
-// validate checks dimensions, parameter values and that k fits every N.
 func (c ScalingConfig) validate() error {
 	if len(c.N) == 0 {
 		return fmt.Errorf("scaling: no N values")
@@ -173,10 +152,6 @@ func (c ScalingConfig) validate() error {
 	return nil
 }
 
-// RunScaling measures query time versus dataset size for every N in the config.
-// Data and queries are synthetic (dataset.Generate): the dataset for N uses
-// cfg.Seed and the query set uses cfg.Seed+1, so a single seed makes the whole
-// experiment reproducible. The same query set is used for every N.
 func RunScaling(cfg ScalingConfig) ([]ScalingResult, error) {
 	cfg = cfg.withDefaults()
 	if err := cfg.validate(); err != nil {

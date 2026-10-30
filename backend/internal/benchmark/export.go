@@ -9,9 +9,6 @@ import (
 	"strconv"
 )
 
-// CSV headers are stable: every run of a given exporter produces the same
-// columns, independently of k. Recall is exported as a plain "recall" column;
-// the JSON encoder uses "recall@<k>" to match the API contract.
 var (
 	resultCSVHeader = []string{
 		"M", "efConstruction", "efSearch", "metric", "heuristic", "k",
@@ -25,20 +22,14 @@ var (
 	}
 )
 
-// ResultCSVHeader returns a copy of the stable CSV header used by WriteCSV.
 func ResultCSVHeader() []string {
 	return append([]string(nil), resultCSVHeader...)
 }
 
-// ScalingCSVHeader returns a copy of the stable CSV header used by
-// WriteScalingCSV.
 func ScalingCSVHeader() []string {
 	return append([]string(nil), scalingCSVHeader...)
 }
 
-// WriteJSON writes v as indented JSON to w. Grid runs pass []Result and scaling
-// runs pass []ScalingResult; both use their MarshalJSON methods, so recall is
-// encoded as "recall@<k>".
 func WriteJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -48,7 +39,6 @@ func WriteJSON(w io.Writer, v any) error {
 	return nil
 }
 
-// WriteJSONFile writes v as indented JSON to path, creating or truncating it.
 func WriteJSONFile(path string, v any) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -65,8 +55,6 @@ func WriteJSONFile(path string, v any) (err error) {
 	return nil
 }
 
-// WriteCSV writes grid results to w as CSV with a stable header and one row per
-// result. The writer is flushed before returning.
 func WriteCSV(w io.Writer, results []Result) error {
 	rows := make([][]string, len(results))
 	for i, r := range results {
@@ -90,7 +78,6 @@ func WriteCSV(w io.Writer, results []Result) error {
 	return writeCSV(w, resultCSVHeader, rows)
 }
 
-// WriteCSVFile writes grid results to path as CSV.
 func WriteCSVFile(path string, results []Result) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -104,8 +91,6 @@ func WriteCSVFile(path string, results []Result) (err error) {
 	return WriteCSV(f, results)
 }
 
-// WriteScalingCSV writes scaling results to w as CSV with a stable header and
-// one row per N.
 func WriteScalingCSV(w io.Writer, results []ScalingResult) error {
 	rows := make([][]string, len(results))
 	for i, r := range results {
@@ -132,7 +117,6 @@ func WriteScalingCSV(w io.Writer, results []ScalingResult) error {
 	return writeCSV(w, scalingCSVHeader, rows)
 }
 
-// WriteScalingCSVFile writes scaling results to path as CSV.
 func WriteScalingCSVFile(path string, results []ScalingResult) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -146,7 +130,6 @@ func WriteScalingCSVFile(path string, results []ScalingResult) (err error) {
 	return WriteScalingCSV(f, results)
 }
 
-// writeCSV writes a header and rows, flushing the underlying writer.
 func writeCSV(w io.Writer, header []string, rows [][]string) error {
 	cw := csv.NewWriter(w)
 	if err := cw.Write(header); err != nil {
@@ -164,8 +147,6 @@ func writeCSV(w io.Writer, header []string, rows [][]string) error {
 	return nil
 }
 
-// formatFloat formats a metric with six decimal places, which keeps report
-// tables readable while retaining enough precision for QPS and latency.
 func formatFloat(v float64) string {
 	return strconv.FormatFloat(v, 'f', 6, 64)
 }

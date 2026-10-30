@@ -1,4 +1,3 @@
-// Command server starts the HNSW coursework HTTP API.
 package main
 
 import (
@@ -28,9 +27,6 @@ func main() {
 	}
 }
 
-// run starts the HTTP server and blocks until ctx is cancelled or the server
-// fails. On cancellation it stops accepting connections and shuts down
-// gracefully with a bounded timeout.
 func run(ctx context.Context, port string) error {
 	if port == "" {
 		port = "8080"
@@ -67,8 +63,6 @@ func run(ctx context.Context, port string) error {
 		log.Printf("api: shutdown signal received")
 	}
 
-	// Cancel an in-flight build first so SSE handlers can receive the terminal
-	// error event and return before Shutdown waits for them.
 	manager.Close()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

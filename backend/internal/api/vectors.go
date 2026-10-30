@@ -27,8 +27,6 @@ func (s *Server) handleInsertVector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reject a non-ready index before validating the dimension so the caller
-	// gets the more actionable INDEX_* error.
 	st := s.mgr.Status()
 	switch st.Status {
 	case indexmanager.StatusIdle:

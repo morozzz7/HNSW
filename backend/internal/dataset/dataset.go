@@ -1,6 +1,3 @@
-// Package dataset provides in-memory datasets of equal-dimension float32
-// vectors, loaders (CSV, JSON, .fvecs/.ivecs), synthetic generators, and
-// validation. Vectors are []float32; internal ids are row indices.
 package dataset
 
 import (
@@ -11,38 +8,32 @@ import (
 	"time"
 )
 
-// Limits guard against accidentally loading enormous files.
 const (
 	MaxVectors = 1_000_000
 	MaxDim     = 8192
 )
 
-// previewRows is the number of vectors exposed in the dataset preview.
 const previewRows = 10
 
-// Dataset is a collection of equal-dimension vectors with metadata.
 type Dataset struct {
 	ID           string      `json:"id"`
 	N            int         `json:"n"`
 	Dim          int         `json:"dim"`
-	Vectors      [][]float32 `json:"-"`       // full vectors; not exposed in list/preview
-	Preview      [][]float32 `json:"preview"` // first previewRows vectors
+	Vectors      [][]float32 `json:"-"`
+	Preview      [][]float32 `json:"preview"`
 	CreatedAt    time.Time   `json:"createdAt"`
-	Source       string      `json:"source"` // csv | json | fvecs | ivecs | generate
+	Source       string      `json:"source"`
 	Distribution string      `json:"distribution,omitempty"`
 	Stats        *Stats      `json:"stats,omitempty"`
-	Path         string      `json:"-"` // source file path, if loaded from disk
+	Path         string      `json:"-"`
 }
 
-// Stats holds per-dimension min/max/mean.
 type Stats struct {
 	Min  []float32 `json:"min"`
 	Max  []float32 `json:"max"`
 	Mean []float32 `json:"mean"`
 }
 
-// NewDataset validates vectors, computes stats and preview, and returns a
-// Dataset with a generated id. It does not register the dataset in a store.
 func NewDataset(source, distribution string, vectors [][]float32) (*Dataset, error) {
 	if err := Validate(vectors); err != nil {
 		return nil, err
@@ -69,8 +60,6 @@ func NewDataset(source, distribution string, vectors [][]float32) (*Dataset, err
 	return ds, nil
 }
 
-// Validate checks that vectors are non-empty, equal-dimension, free of
-// NaN/Inf, and within size limits.
 func Validate(vectors [][]float32) error {
 	if len(vectors) == 0 {
 		return errors.New("dataset: no vectors")
@@ -103,7 +92,6 @@ func Validate(vectors [][]float32) error {
 	return nil
 }
 
-// computeStats returns per-dimension min, max and mean.
 func computeStats(vectors [][]float32) *Stats {
 	n := len(vectors)
 	dim := len(vectors[0])
@@ -129,14 +117,12 @@ func computeStats(vectors [][]float32) *Stats {
 	return &Stats{Min: min, Max: max, Mean: mean}
 }
 
-// Store is an in-memory store of datasets, safe for concurrent use.
 type Store struct {
 	mu       sync.RWMutex
 	datasets map[string]*Dataset
 	nextID   int
 }
 
-// NewStore creates an empty dataset store.
 func NewStore() *Store {
 	return &Store{
 		datasets: make(map[string]*Dataset),
@@ -144,7 +130,6 @@ func NewStore() *Store {
 	}
 }
 
-// Add registers a dataset and returns its id.
 func (s *Store) Add(ds *Dataset) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -155,27 +140,24 @@ func (s *Store) Add(ds *Dataset) string {
 	return id
 }
 
-// Get returns the dataset with the given id, or nil if not found.
 func (s *Store) Get(id string) *Dataset {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.datasets[id]
 }
 
-// List returns all datasets (without full vectors).
 func (s *Store) List() []*Dataset {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]*Dataset, 0, len(s.datasets))
 	for _, ds := range s.datasets {
 		cp := *ds
-		cp.Vectors = nil // do not expose full vectors in list
+		cp.Vectors = nil
 		out = append(out, &cp)
 	}
 	return out
 }
 
-// Remove deletes the dataset with the given id. Returns true if removed.
 func (s *Store) Remove(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -186,7 +168,6 @@ func (s *Store) Remove(id string) bool {
 	return true
 }
 
-// Count returns the number of stored datasets.
 func (s *Store) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
