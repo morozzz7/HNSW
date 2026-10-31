@@ -12,7 +12,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 tasks 5.1–5.5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 0.3 (frontend scaffolding) is still in the frontend agent's domain; the next backend tasks are 5.6 (`SearchWithTrace` contract verification) and 5.7 (`GET /graph`).
+**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 0.3 (frontend scaffolding) is still in the frontend agent's domain.
 
 ---
 
@@ -85,11 +85,11 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 - [x] 5.3 `POST /index`, `GET /index/status`, `GET /index/events` (SSE), `GET /index/stats`
 - [x] 5.4 `POST /vectors` (insert into a ready index)
 - [x] 5.5 `POST /search` (mode: hnsw / bruteforce, `trace`)
-- [ ] 5.6 `SearchWithTrace` in core: per-layer path (visited nodes, closest per layer)
-- [ ] 5.7 `GET /graph` (`level`, `limit`, `around`, PCA coordinates)
-- [ ] 5.8 `POST /benchmark` (run + fetch results)
-- [ ] 5.9 Save/load index to disk (optional)
-- [ ] 5.10 Update `docs/API.md`
+- [x] 5.6 `SearchWithTrace` in core: per-layer path (visited nodes, closest per layer)
+- [x] 5.7 `GET /graph` (`level`, `limit`, `around`, PCA coordinates)
+- [x] 5.8 `POST /benchmark` (run + fetch results)
+- [x] 5.9 Save/load index to disk (optional)
+- [x] 5.10 Update `docs/API.md`
 
 ## Stage 5.5. Backend hardening (review fixes)
 
@@ -193,6 +193,8 @@ _None yet._
 - Reports in `docs/reports/` are not maintained (see `AGENTS.md`); only this plan, `docs/API.md` and `README.md` are kept in sync.
 
 ## Change log
+
+| 2026-10-31 | backend | Завершены Stage 5.6–5.10: добавлены graph snapshot и `GET /graph` с PCA/around, асинхронные `POST /benchmark` + `GET /benchmark/{id}`, versioned gob save/load для HNSW и indexmanager, тесты и обновлён `docs/API.md`. |
 
 | Date | Agent | What was done |
 |---|---|---|

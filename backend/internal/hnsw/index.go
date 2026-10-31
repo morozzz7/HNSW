@@ -1,8 +1,10 @@
 package hnsw
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"sync"
@@ -89,6 +91,22 @@ type Stats struct {
 	M               int
 	Mmax0           int
 	EfConstruction  int
+}
+
+type GraphNode struct {
+	ID        uint32
+	External  uint32
+	Vector    []float32
+	MaxLevel  int
+	Neighbors [][]uint32
+}
+
+type GraphSnapshot struct {
+	Config     Config
+	Dimension  int
+	EntryPoint uint32
+	MaxLevel   int
+	Nodes      []GraphNode
 }
 
 type Index struct {
@@ -190,6 +208,97 @@ func (idx *Index) Dim() int {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.dim
+}
+
+func (idx *Index) GraphSnapshot() GraphSnapshot {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	s := GraphSnapshot{Config: idx.config, Dimension: idx.dim, EntryPoint: idx.entryPoint, MaxLevel: idx.maxLevel}
+	s.Nodes = make([]GraphNode, len(idx.nodes))
+	for i, nd := range idx.nodes {
+		n := GraphNode{ID: nd.id, MaxLevel: nd.maxLevel, Vector: append([]float32(nil), nd.vector...), Neighbors: make([][]uint32, len(nd.neighbors))}
+		if i < len(idx.intToExt) {
+			n.External = idx.intToExt[i]
+		}
+		for l := range nd.neighbors {
+			n.Neighbors[l] = append([]uint32(nil), nd.neighbors[l]...)
+		}
+		s.Nodes[i] = n
+	}
+	return s
+}
+
+type persistedIndex struct {
+	Version  int
+	Snapshot GraphSnapshot
+}
+
+func (idx *Index) Save(w io.Writer) error {
+	if w == nil {
+		return errors.New("hnsw: nil save writer")
+	}
+	return gob.NewEncoder(w).Encode(persistedIndex{Version: 1, Snapshot: idx.GraphSnapshot()})
+}
+
+func Load(r io.Reader) (*Index, error) {
+	if r == nil {
+		return nil, errors.New("hnsw: nil load reader")
+	}
+	var p persistedIndex
+	if err := gob.NewDecoder(r).Decode(&p); err != nil {
+		return nil, fmt.Errorf("hnsw: decode index: %w", err)
+	}
+	if p.Version != 1 {
+		return nil, fmt.Errorf("hnsw: unsupported index version %d", p.Version)
+	}
+	s := p.Snapshot
+	if err := s.Config.Validate(); err != nil {
+		return nil, fmt.Errorf("hnsw: invalid saved config: %w", err)
+	}
+	if s.Dimension <= 0 || len(s.Nodes) == 0 {
+		return nil, errors.New("hnsw: saved index is empty or has invalid dimension")
+	}
+	return LoadSnapshot(s)
+}
+
+func LoadSnapshot(s GraphSnapshot) (*Index, error) {
+	if err := s.Config.Validate(); err != nil {
+		return nil, fmt.Errorf("hnsw: invalid saved config: %w", err)
+	}
+	if s.Dimension <= 0 || len(s.Nodes) == 0 {
+		return nil, errors.New("hnsw: saved index is empty or has invalid dimension")
+	}
+	idx, err := New(s.Config)
+	if err != nil {
+		return nil, err
+	}
+	idx.dim, idx.entryPoint, idx.maxLevel = s.Dimension, s.EntryPoint, s.MaxLevel
+	idx.nodes = make([]*node, len(s.Nodes))
+	idx.intToExt = make([]uint32, len(s.Nodes))
+	idx.extToInt = make(map[uint32]uint32, len(s.Nodes))
+	for i, sn := range s.Nodes {
+		if int(sn.ID) != i || len(sn.Vector) != s.Dimension || sn.MaxLevel < 0 || len(sn.Neighbors) != sn.MaxLevel+1 {
+			return nil, fmt.Errorf("hnsw: invalid saved node %d", i)
+		}
+		nd := &node{id: sn.ID, vector: append([]float32(nil), sn.Vector...), maxLevel: sn.MaxLevel, neighbors: make([][]uint32, len(sn.Neighbors))}
+		for l, ids := range sn.Neighbors {
+			for _, id := range ids {
+				if int(id) >= len(s.Nodes) || id == sn.ID {
+					return nil, fmt.Errorf("hnsw: invalid edge %d -> %d", sn.ID, id)
+				}
+			}
+			nd.neighbors[l] = append([]uint32(nil), ids...)
+		}
+		idx.nodes[i], idx.intToExt[i] = nd, sn.External
+		if _, ok := idx.extToInt[sn.External]; ok {
+			return nil, errors.New("hnsw: duplicate external id")
+		}
+		idx.extToInt[sn.External] = sn.ID
+	}
+	if int(idx.entryPoint) >= len(idx.nodes) || idx.maxLevel < 0 {
+		return nil, errors.New("hnsw: invalid entry point")
+	}
+	return idx, nil
 }
 
 func (idx *Index) ensureDim(vector []float32) error {

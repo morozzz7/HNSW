@@ -1,11 +1,45 @@
 package hnsw
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
 )
+
+func TestSaveLoadPreservesSearch(t *testing.T) {
+	idx := MustNew(Config{M: 8, EfConstruction: 50, Seed: 7})
+	for i := 0; i < 32; i++ {
+		if _, err := idx.Insert([]float32{float32(i), float32(i % 3)}, uint32(100+i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var buf bytes.Buffer
+	if err := idx.Save(&buf); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := idx.Search([]float32{4, 1}, 5, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := loaded.Search([]float32{4, 1}, 5, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("loaded result length = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("result %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
 
 func randVec(r *rand.Rand, dim int) []float32 {
 	v := make([]float32, dim)

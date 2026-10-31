@@ -180,6 +180,55 @@ func TestHealthAndUnifiedRoutingErrors(t *testing.T) {
 	expectError(t, rec, http.StatusBadRequest, codeInvalidRequest)
 }
 
+func TestGraphAndBenchmarkEndpoints(t *testing.T) {
+	srv, mgr := newTestAPI(t)
+	h := srv.Handler()
+	readyIndex(t, h, mgr)
+
+	rec := doJSON(t, h, http.MethodGet, basePath+"/graph?level=0&limit=10", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("graph status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	graph := decodeMap(t, rec)
+	if graph["totalVertices"] != float64(testDatasetN) {
+		t.Fatalf("unexpected graph total: %v", graph["totalVertices"])
+	}
+	if len(graph["vertices"].([]any)) == 0 {
+		t.Fatal("graph has no vertices")
+	}
+
+	rec = doJSON(t, h, http.MethodPost, basePath+"/benchmark", map[string]any{
+		"M": []int{buildM}, "efConstruction": []int{buildEfC}, "efSearch": []int{10}, "k": 3, "queries": 4,
+	})
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("benchmark status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	jobID, _ := decodeMap(t, rec)["id"].(string)
+	if jobID == "" {
+		t.Fatal("benchmark id is empty")
+	}
+	deadline := time.Now().Add(testTimeout)
+	for time.Now().Before(deadline) {
+		rec = doJSON(t, h, http.MethodGet, basePath+"/benchmark/"+jobID, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("benchmark status poll = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		body := decodeMap(t, rec)
+		status, _ := body["status"].(string)
+		if status == "done" {
+			if len(body["results"].([]any)) != 1 {
+				t.Fatalf("unexpected benchmark result: %v", body["results"])
+			}
+			return
+		}
+		if status == "error" {
+			t.Fatalf("benchmark failed: %v", body["error"])
+		}
+		time.Sleep(pollInterval)
+	}
+	t.Fatal("benchmark did not finish")
+}
+
 func TestCORSPreflight(t *testing.T) {
 	srv, _ := newTestAPI(t)
 	h := srv.Handler()

@@ -320,16 +320,16 @@ values mean closer vectors (same convention as the internal index).
 
 ---
 
-### 5. Planned endpoints (not implemented)
+### 5. Graph and benchmark endpoints
 
-The routes below are part of the design but are **not implemented**. They currently return `404 NOT_FOUND`.
-They are documented so the contract is stable before the frontend work starts.
-
-#### `GET /graph` (planned)
+#### `GET /graph`
 
 Vertices and edges of a layer, with a vertex-count limit. PCA 2D coordinates are attached.
 
 **Query params:** `level` (default 0), `limit` (max vertices, default 500), `around` (optional external/internal id to center the view on).
+
+`limit` is constrained to `1..5000`. `around` returns the selected vertex and its direct neighbors on the selected
+layer. PCA coordinates are computed from the indexed vectors. Unknown IDs and invalid levels return `INVALID_REQUEST`.
 
 **Response (200):**
 
@@ -349,7 +349,7 @@ Vertices and edges of a layer, with a vertex-count limit. PCA 2D coordinates are
 
 ---
 
-#### `POST /benchmark` (planned)
+#### `POST /benchmark`
 
 Run HNSW vs brute-force comparison over a parameter grid.
 
@@ -366,11 +366,20 @@ Run HNSW vs brute-force comparison over a parameter grid.
 }
 ```
 
-**Response (200):**
+**Response (202):**
+
+```json
+{ "id": "bench_3f9a", "status": "queued" }
+```
+
+Poll `GET /benchmark/{id}`. While running, the response contains `id`, `status` (`queued` or `running`) and
+`progress` from 0 to 1. A completed response contains:
 
 ```json
 {
   "id": "bench_3f9a",
+  "status": "done",
+  "progress": 1,
   "results": [
     {
       "M": 16,
@@ -389,4 +398,11 @@ Run HNSW vs brute-force comparison over a parameter grid.
 }
 ```
 
-`POST /benchmark` is planned as an asynchronous job with `GET /benchmark/{id}` for polling.
+The benchmark uses deterministic queries sampled from the current ready index dataset. The grid is limited to 256
+parameter combinations and `queries` to 10,000. Failed jobs have `status: "error"` and an `error` field.
+
+### 6. Library persistence
+
+The HTTP API does not accept filesystem paths. Go callers may use `hnsw.Index.Save`/`hnsw.Load` for a core index or
+`indexmanager.Manager.Save`/`Load` for an index together with vectors and external-ID metadata. The binary format is
+versioned and validated during loading.

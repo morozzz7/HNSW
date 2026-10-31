@@ -2,6 +2,7 @@ package indexmanager
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,39 @@ import (
 	"hnsw-coursework/internal/dataset"
 	"hnsw-coursework/internal/hnsw"
 )
+
+func TestSaveLoadPreservesManagerSearch(t *testing.T) {
+	mgr, ds := newTestManager(t, 32, 4)
+	if _, err := mgr.StartBuild(BuildConfig{DatasetID: ds.ID, M: 8, EfConstruction: 50, Metric: hnsw.MetricL2, Seed: 7}); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, mgr, StatusReady)
+	path := filepath.Join(t.TempDir(), "index.bin")
+	if err := mgr.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded := New(dataset.NewStore())
+	if err := loaded.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	want, _, err := mgr.HNSWSearch(ds.Vectors[0], 5, 20, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := loaded.HNSWSearch(ds.Vectors[0], 5, 20, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("loaded result length = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Internal != want[i].Internal || got[i].VectorID != want[i].VectorID {
+			t.Fatalf("result %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
 
 func newTestManager(t *testing.T, n, dim int) (*Manager, *dataset.Dataset) {
 	t.Helper()

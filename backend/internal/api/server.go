@@ -51,6 +51,7 @@ type Server struct {
 	mgr            *indexmanager.Manager
 	mux            *http.ServeMux
 	maxUploadBytes int64
+	bench          *benchmarkStore
 }
 
 func NewServer(store *dataset.Store, mgr *indexmanager.Manager) *Server {
@@ -59,6 +60,7 @@ func NewServer(store *dataset.Store, mgr *indexmanager.Manager) *Server {
 		mgr:            mgr,
 		mux:            http.NewServeMux(),
 		maxUploadBytes: maxUploadBytes,
+		bench:          &benchmarkStore{jobs: make(map[string]*benchmarkJob)},
 	}
 	s.routes()
 	return s
@@ -81,6 +83,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET "+basePath+"/index/stats", s.handleIndexStats)
 	s.mux.HandleFunc("POST "+basePath+"/vectors", s.handleInsertVector)
 	s.mux.HandleFunc("POST "+basePath+"/search", s.handleSearch)
+	s.mux.HandleFunc("GET "+basePath+"/graph", s.handleGraph)
+	s.mux.HandleFunc("POST "+basePath+"/benchmark", s.handleBenchmark)
+	s.mux.HandleFunc("GET "+basePath+"/benchmark/{id}", s.handleBenchmarkStatus)
 
 	for _, path := range []string{
 		basePath + "/health",
@@ -92,6 +97,9 @@ func (s *Server) routes() {
 		basePath + "/index/stats",
 		basePath + "/vectors",
 		basePath + "/search",
+		basePath + "/graph",
+		basePath + "/benchmark",
+		basePath + "/benchmark/{id}",
 	} {
 		s.mux.HandleFunc(path, s.handleMethodNotAllowed)
 	}
