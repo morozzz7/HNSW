@@ -1,6 +1,7 @@
 package hnsw
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -38,19 +39,37 @@ func defaultConfig() Config {
 
 func (c Config) resolve() Config {
 	cfg := c
-	if cfg.M <= 0 {
+	if cfg.M == 0 {
 		cfg.M = 16
 	}
-	if cfg.Mmax0 <= 0 {
+	if cfg.Mmax0 == 0 {
 		cfg.Mmax0 = 2 * cfg.M
 	}
-	if cfg.EfConstruction <= 0 {
+	if cfg.EfConstruction == 0 {
 		cfg.EfConstruction = 200
 	}
 	if cfg.Metric == "" {
 		cfg.Metric = MetricL2
 	}
 	return cfg
+}
+
+func (c Config) Validate() error {
+	if c.M < MinM || c.M > MaxM {
+		return fmt.Errorf("M must be between %d and %d, got %d", MinM, MaxM, c.M)
+	}
+	if c.Mmax0 < c.M || c.Mmax0 > 4*c.M {
+		return fmt.Errorf("Mmax0 must be between %d and %d, got %d", c.M, 4*c.M, c.Mmax0)
+	}
+	if c.EfConstruction < 1 || c.EfConstruction > MaxEfConstruction {
+		return fmt.Errorf("efConstruction must be between 1 and %d, got %d", MaxEfConstruction, c.EfConstruction)
+	}
+	switch c.Metric {
+	case MetricL2, MetricCosine, MetricInnerProduct:
+	default:
+		return fmt.Errorf("unknown metric %q", c.Metric)
+	}
+	return nil
 }
 
 func (c Config) Mmax(level int) int {
@@ -87,8 +106,11 @@ type Index struct {
 	intToExt []uint32
 }
 
-func New(cfg Config) *Index {
+func New(cfg Config) (*Index, error) {
 	cfg = cfg.resolve()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return &Index{
 		config:     cfg,
 		dist:       Distance(cfg.Metric),
@@ -100,7 +122,15 @@ func New(cfg Config) *Index {
 		mL:         1.0 / math.Log(float64(cfg.M)),
 		extToInt:   make(map[uint32]uint32, 64),
 		intToExt:   make([]uint32, 0, 64),
+	}, nil
+}
+
+func MustNew(cfg Config) *Index {
+	idx, err := New(cfg)
+	if err != nil {
+		panic(err)
 	}
+	return idx
 }
 
 func (idx *Index) Len() int {
@@ -163,6 +193,9 @@ func (idx *Index) Dim() int {
 }
 
 func (idx *Index) ensureDim(vector []float32) error {
+	if len(vector) == 0 {
+		return errors.New("hnsw: zero-dimensional vector")
+	}
 	if idx.dim == 0 {
 		idx.dim = len(vector)
 		return nil

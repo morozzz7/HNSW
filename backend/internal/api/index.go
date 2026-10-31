@@ -62,12 +62,14 @@ func (s *Server) handleBuildIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.M < 0 {
-		writeError(w, http.StatusBadRequest, codeInvalidRequest, "M must be positive")
+	if req.M < 0 || req.M > hnsw.MaxM || (req.M > 0 && req.M < hnsw.MinM) {
+		writeError(w, http.StatusBadRequest, codeInvalidRequest,
+			fmt.Sprintf("M must be between %d and %d", hnsw.MinM, hnsw.MaxM))
 		return
 	}
-	if req.EfConstruction < 0 {
-		writeError(w, http.StatusBadRequest, codeInvalidRequest, "efConstruction must be positive")
+	if req.EfConstruction < 0 || req.EfConstruction > hnsw.MaxEfConstruction {
+		writeError(w, http.StatusBadRequest, codeInvalidRequest,
+			fmt.Sprintf("efConstruction must be between 1 and %d", hnsw.MaxEfConstruction))
 		return
 	}
 	if req.M == 0 {

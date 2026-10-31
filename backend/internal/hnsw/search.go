@@ -76,8 +76,14 @@ func (idx *Index) Search(q []float32, k, efSearch int) ([]Result, error) {
 	}
 
 	ef := efSearch
-	if k > ef {
+	if ef < k {
 		ef = k
+	}
+	if ef < 1 {
+		ef = 1
+	}
+	if ef > len(idx.nodes) {
+		ef = len(idx.nodes)
 	}
 
 	ep := idx.entryPoint
@@ -108,8 +114,14 @@ func (idx *Index) SearchWithTrace(q []float32, k, efSearch int) ([]Result, *Trac
 	}
 
 	ef := efSearch
-	if k > ef {
+	if ef < k {
 		ef = k
+	}
+	if ef < 1 {
+		ef = 1
+	}
+	if ef > len(idx.nodes) {
+		ef = len(idx.nodes)
 	}
 
 	trace := &Trace{}

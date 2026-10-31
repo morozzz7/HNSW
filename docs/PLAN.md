@@ -8,13 +8,11 @@
 
 > **For agents:** this file is the single source of truth on progress. Read it fully before starting. After finishing a task, mark it `[x]` and add an entry to the "Change log" (bottom). Never redo `[x]` items. If blocked, mark `[~]` and describe the reason in "Blockers".
 >
-> **Reports:** after every reasonably global change (finished stage or task group, new module/page/endpoint, architectural decision, major refactoring, benchmark run) the agent writes a report in `docs/reports/` from `docs/reports/TEMPLATE.md` **in Russian**, and links it in the "Change log" and "Reports index". Criteria and rules are in `.opencode/agent/*.md`.
->
-> **Language:** all files and code in English; UI text and reports in Russian. Code comments are not allowed.
+> **Language:** all files and code in English; UI text in Russian. Code comments are not allowed.
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module) and Stage 5 tasks 5.1–5.5 (HTTP API: server, datasets, async index build + SSE, vectors, search) are complete. Stage 0.3 (frontend scaffolding) is still in the frontend agent's domain; the next backend tasks are 5.6 (`SearchWithTrace` contract verification) and 5.7 (`GET /graph`).
+**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 tasks 5.1–5.5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 0.3 (frontend scaffolding) is still in the frontend agent's domain; the next backend tasks are 5.6 (`SearchWithTrace` contract verification) and 5.7 (`GET /graph`).
 
 ---
 
@@ -93,6 +91,23 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 - [ ] 5.9 Save/load index to disk (optional)
 - [ ] 5.10 Update `docs/API.md`
 
+## Stage 5.5. Backend hardening (review fixes)
+
+- [x] H1 Validate `M`, `efConstruction`, `k`, `efSearch` in `hnsw`, `indexmanager`, `api`, `benchmark`
+- [x] H2 Recover panics in the build goroutine and report `StatusError`
+- [x] H3 Reject zero-dimensional vectors in `hnsw`
+- [x] H4 Fix `backend/Makefile` so all targets run from `backend/`
+- [x] H5 Streaming CSV/JSON loaders with limits and a 1 GiB dataset store budget
+- [x] H6 Incremental brute-force index (`Append` + locking) instead of rebuild per insert
+- [x] H7 Synchronize `README.md` and `docs/API.md` with the implementation
+- [x] H8 Clone vectors at public ownership boundaries
+- [x] H9 Add `includeVectors` and output limits to `POST /search`
+- [x] H10 Implement Algorithm 4 `ExtendCandidates` / `KeepPruned` options
+- [x] H11 Add tests, speed up `TestQualityRecall`, remove dead benchmark call
+- [x] H12 GitHub Actions CI (`gofmt`, `go vet`, `go test`, `-race`)
+- [x] H13 Bound PCA memory and dimensions
+- [x] H14 Repository hygiene (`.gitignore`, broken report link, API id formats)
+
 ## Stage 6. Frontend: skeleton, Dataset and Index pages
 
 - [ ] 6.1 Skeleton: routing, layout, navigation, theme
@@ -166,23 +181,22 @@ _None yet._
 - Added `GET /api/v1/health` and extra error codes (`FILE_TOO_LARGE`, `UNSUPPORTED_FILE_TYPE`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `INTERNAL_ERROR`) to `docs/API.md`; no other contract changes.
 - `benchmark.Result` / `benchmark.ScalingResult` are the wire-ready rows for `POST /benchmark`: `MarshalJSON` emits `recall@<k>` as in the contract, while CSV export keeps a stable `recall` column independent of `k`.
 - Query timing is calibrated by repeated invocations (minimum of 5 trials must reach `minSampleDuration = 1 ms`, up to 4096 repeats) because the development machine's clock is very coarse; this keeps QPS/latency meaningful for fast queries.
-
-## Reports index
-
-| # | Date | Agent | Report | Stage / tasks |
-|---|---|---|---|---|
-| 1 | 2026-10-26 | backend | `docs/reports/2026-10-26_01_backend_etape-0-nastroika-repozytoriya.md` | Этап 0 (0.1, 0.2, 0.4–0.7) |
-| 2 | 2026-10-26 | backend | `docs/reports/2026-10-26_02_backend_etap-1-yadro-hnsw.md` | Этап 1 (1.1–1.13) |
-| 3 | 2026-10-27 | backend | `docs/reports/2026-10-27_03_backend_etap-2-sloj-dannyh.md` | Этап 2 (2.1–2.8) |
-| 4 | 2026-10-27 | backend | `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md` | Этап 3 (3.1–3.3) |
-| 5 | 2026-10-29 | backend | `docs/reports/2026-10-29_01_backend_etap-4-benchmark-modul.md` | Этап 4 (4.1–4.6) |
-| 6 | 2026-10-29 | backend | `docs/reports/2026-10-29_02_backend_etap-5-http-api.md` | Этап 5 (5.1–5.5) |
+- Parameter limits: `M` in `[2, 128]`, `efConstruction` in `[1, 10000]`, `k` in `[1, 1000]`, `efSearch` in `[0, 10000]`. `hnsw.New` returns `(*Index, error)` and validates the resolved config; `hnsw.MustNew` is used by tests only.
+- The asynchronous build goroutine recovers panics, logs the stack, and moves the manager to `StatusError` instead of terminating the process.
+- Zero-dimensional vectors are rejected by `hnsw.Insert` before the index dimension is set.
+- Dataset loaders stream input and enforce vector/dimension/component limits while reading; the in-memory store has a 1 GiB budget (`dataset.NewStoreWithBudget` for tests) and returns `ErrStoreFull` / `507 STORE_FULL`.
+- `bruteforce.Index` supports incremental `Append` under a `RWMutex`; `POST /vectors` no longer rebuilds the whole brute-force index.
+- Vectors are cloned at public ownership boundaries (`hnsw.Insert`, `bruteforce.Append`) and by the manager before storing inserted vectors.
+- `includeVectors` defaults to `true` in `POST /search` to keep the existing contract; set it to `false` to omit vectors from the response.
+- Algorithm 4 options `ExtendCandidates` and `KeepPruned` are implemented; both default to `false` to preserve existing benchmark results.
+- `backend/Makefile` assumes it is run from `backend/`; `make -C backend <target>` works from the repository root.
+- Reports in `docs/reports/` are not maintained (see `AGENTS.md`); only this plan, `docs/API.md` and `README.md` are kept in sync.
 
 ## Change log
 
 | Date | Agent | What was done |
 |---|---|---|
-| 2026-10-26 | backend | Этап 1 (1.1–1.13): реализовано ядро HNSW с нуля в `backend/internal/hnsw` — метрики расстояний (L², cosine, inner product), типизированные кучами min/max, посещение с generation counter + `sync.Pool`, `Index`/`Config` с генерацией уровня `floor(-ln(U)·mL)`, SEARCH-LAYER (Алг. 2), SELECT-NEIGHBORS (Алг. 3 и 4), INSERT (Алг. 1) с двунаправленными ссылками и обрезкой переполненных соседей, K-NN-SEARCH (Алг. 5) с per-query `efSearch`, `SearchWithTrace`, `Stats`. Тесты: юнит-тесты всех компонентов, инварианты графа, детерминизм по seed, recall@10 = 1.0000 на 10k случайных векторов (M=16, efC=200, efSearch=100, dim=16, 100 запросов), `go test -race` пройден (102.8s). Бенчмарки: Insert ~87.7 мс на 1000 вставок, Search ~67.9 мкс/запрос. Зависимости не добавлялись (алгоритм реализован с нуля). Отчёт: `docs/reports/2026-10-26_02_backend_etap-1-yadro-hnsw.md`. |
+| 2026-10-26 | backend | Этап 1 (1.1–1.13): реализовано ядро HNSW с нуля в `backend/internal/hnsw` — метрики расстояний (L², cosine, inner product), типизированные кучами min/max, посещение с generation counter + `sync.Pool`, `Index`/`Config` с генерацией уровня `floor(-ln(U)·mL)`, SEARCH-LAYER (Алг. 2), SELECT-NEIGHBORS (Алг. 3 и 4), INSERT (Алг. 1) с двунаправленными ссылками и обрезкой переполненных соседей, K-NN-SEARCH (Алг. 5) с per-query `efSearch`, `SearchWithTrace`, `Stats`. Тесты: юнит-тесты всех компонентов, инварианты графа, детерминизм по seed, recall@10 = 1.0000 на 10k случайных векторов (M=16, efC=200, efSearch=100, dim=16, 100 запросов), `go test -race` пройден (102.8s). Бенчмарки: Insert ~87.7 мс на 1000 вставок, Search ~67.9 мкс/запрос. Зависимости не добавлялись (алгоритм реализован с нуля). |
 | 2026-10-27 | backend | Этап 2 (2.1–2.8): слой данных в `backend/internal/dataset` и `backend/internal/projection` — загрузчики CSV/JSON/.fvecs/.ivecs, генераторы uniform/gaussian/clusters, валидация (размерность, NaN/Inf, лимиты), in-memory `Store` с метаданными и preview, PCA -> 2D с кэшем, скрипт `scripts/download_sift.sh`. Тесты: unit-тесты загрузчиков, генератора, Store, валидации и PCA. `go vet`/`go test`/`gofmt` чисто. Отчёт: `docs/reports/2026-10-27_03_backend_etap-2-sloj-dannyh.md`. |
 | 2026-10-26 | backend | Этап 0: структура репозитория (`backend/`, `frontend/`, `scripts/`), `backend/go.mod` (`hnsw-coursework`), `backend/Makefile` (run/test/bench/vet/lint), корневой `.gitignore`, `README.md`, `docs/API.md` (version 1 контракта). `go vet`/`go test` пока без пакетов (кода нет) — проверка станет обязательна с Этапа 1. Отчёт: `docs/reports/2026-10-26_01_backend_etape-0-nastroika-repozytoriya.md`. |
 | 2026-10-27 | backend | Этап 3 (3.1–3.3): `backend/internal/bruteforce` — точный k-NN линейным сканом (последовательно и параллельно через `NewWithWorkers`; результат детерминирован, тай-брейк по id), `Recall` (recall@k по множеству id); `backend/internal/benchmark` — перцентили задержки p50/p95/p99 (линейная интерполяция), QPS по средней задержке, `MeasureBuildTime`, оценка памяти через `HeapInUse`; интеграционный тест качества HNSW vs bruteforce. Результаты: recall@10 = 1.0000 (n=3000, dim=16, M=16, efC=100, efSearch=50, 30 запросов), построение 165.6 мс, память 824 KiB, p50=0.033 мс, p95=0.052 мс, p99=0.066 мс, QPS ≈ 27 362. Бенчмарки: bruteforce 0.965 мс/запрос (n=10000, dim=16, k=10) ≈ 1036 QPS, параллельный (4 воркера) 0.316 мс ≈ 3163 QPS (ускорение ≈3.05×); HNSW 61.8 мкс/запрос (n=5000, efSearch=100). `hnsw.Search`/`SearchWithTrace` теперь возвращают экспортируемый `[]hnsw.Result` (`ID`, `Dist`) вместо внутреннего `item` — для сравнения из других пакетов и будущего API (поведение не менялось). `go vet`, `gofmt`, `go test`, `go test -race` — чисто. Отчёт: `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md`. |

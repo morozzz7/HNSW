@@ -1,6 +1,7 @@
 package dataset
 
 import (
+	"errors"
 	"math"
 	"testing"
 )
@@ -86,8 +87,14 @@ func TestStoreCRUD(t *testing.T) {
 
 	ds1, _ := NewDataset("generate", "uniform", [][]float32{{1, 2}})
 	ds2, _ := NewDataset("generate", "gaussian", [][]float32{{3, 4}})
-	id1 := s.Add(ds1)
-	id2 := s.Add(ds2)
+	id1, err := s.Add(ds1)
+	if err != nil {
+		t.Fatalf("Add(ds1) = %v", err)
+	}
+	id2, err := s.Add(ds2)
+	if err != nil {
+		t.Fatalf("Add(ds2) = %v", err)
+	}
 	if id1 == id2 {
 		t.Fatal("ids should differ")
 	}
@@ -127,5 +134,43 @@ func TestNewDatasetValidationError(t *testing.T) {
 	_, err := NewDataset("csv", "", [][]float32{{1, 2}, {3}})
 	if err == nil {
 		t.Fatal("NewDataset(dim mismatch) = nil, want error")
+	}
+}
+
+func TestStoreBudget(t *testing.T) {
+	ds1, err := NewDataset("generate", "uniform", [][]float32{{1, 2}})
+	if err != nil {
+		t.Fatalf("NewDataset: %v", err)
+	}
+	ds2, err := NewDataset("generate", "uniform", [][]float32{{3, 4}})
+	if err != nil {
+		t.Fatalf("NewDataset: %v", err)
+	}
+
+	s := NewStoreWithBudget(ds1.Bytes())
+	id1, err := s.Add(ds1)
+	if err != nil {
+		t.Fatalf("Add within budget = %v", err)
+	}
+	if _, err := s.Add(ds2); !errors.Is(err, ErrStoreFull) {
+		t.Fatalf("Add over budget = %v, want ErrStoreFull", err)
+	}
+
+	if !s.Remove(id1) {
+		t.Fatal("Remove = false")
+	}
+	if _, err := s.Add(ds2); err != nil {
+		t.Fatalf("Add after Remove = %v", err)
+	}
+}
+
+func TestDatasetBytes(t *testing.T) {
+	ds, err := NewDataset("generate", "uniform", [][]float32{{1, 2, 3}, {4, 5, 6}})
+	if err != nil {
+		t.Fatalf("NewDataset: %v", err)
+	}
+	want := int64(2*3*4 + 3*3*4)
+	if got := ds.Bytes(); got != want {
+		t.Fatalf("Bytes = %d, want %d", got, want)
 	}
 }

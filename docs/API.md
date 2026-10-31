@@ -9,7 +9,7 @@ All files and code comments are in English; this contract is part of the reposit
 **Vectors:** `[]float32`. Distances are compared as squared L2; `sqrt` is applied only in API output.
 **IDs:** internal graph IDs are `uint32`; external IDs are provided by the client or assigned by the server.
 
-The implementation also exposes `GET /health` (`200 {"status":"ok"}`); it is not part of the documented
+The implementation also exposes `GET /api/v1/health` (`200 {"status":"ok"}`); it is not part of the documented
 application flow and is only used for liveness checks.
 
 ---
@@ -41,6 +41,7 @@ Standard error codes:
 | `SEARCH_FAILED` | 500 | search failed (see message) |
 | `FILE_TOO_LARGE` | 413 | dataset upload exceeds the 256 MiB limit |
 | `UNSUPPORTED_FILE_TYPE` | 415 | upload is not a `.csv` or `.json` file |
+| `STORE_FULL` | 507 | dataset store memory budget (1 GiB by default) exceeded |
 | `NOT_FOUND` | 404 | unknown route |
 | `METHOD_NOT_ALLOWED` | 405 | known route, wrong HTTP method |
 | `INTERNAL_ERROR` | 500 | unexpected server error |
@@ -58,7 +59,14 @@ Unknown paths and wrong methods also use the envelope above (`NOT_FOUND` / `METH
 Upload a dataset file (CSV or JSON) or generate a synthetic one.
 
 **Multipart upload:** form field `file` with a `.csv` or `.json` file (maximum 256 MiB; other extensions are
-rejected with `UNSUPPORTED_FILE_TYPE`).
+rejected with `UNSUPPORTED_FILE_TYPE`). The body size limit is checked before parsing; row/dimension/component
+limits are enforced while streaming, so the loader does not buffer the whole document. `.fvecs` and `.ivecs`
+files are not accepted over HTTP; they are available only through the Go loaders (`dataset.LoadFile`) and
+benchmarks.
+
+**Limits:** at most 1 000 000 vectors, dimension at most 8192, and at most 50 000 000 float components per
+dataset. The in-memory store keeps at most 1 GiB of dataset vectors; a request that would exceed it returns
+`507 STORE_FULL`.
 
 **Generation (JSON body):**
 
@@ -76,7 +84,7 @@ rejected with `UNSUPPORTED_FILE_TYPE`).
 
 ```json
 {
-  "id": "ds_53a1f2",
+  "id": "ds_000001",
   "n": 1000,
   "dim": 16,
   "preview": [[0.12, -0.05, ...], ...]   // first few vectors
@@ -92,7 +100,7 @@ List all uploaded/generated datasets.
 ```json
 {
   "datasets": [
-    { "id": "ds_53a1f2", "n": 1000, "dim": 16, "createdAt": "2026-10-26T19:00:00Z" }
+    { "id": "ds_000001", "n": 1000, "dim": 16, "createdAt": "2026-10-26T19:00:00Z" }
   ]
 }
 ```
@@ -105,7 +113,7 @@ Dataset metadata and preview.
 
 ```json
 {
-  "id": "ds_53a1f2",
+  "id": "ds_000001",
   "n": 1000,
   "dim": 16,
   "preview": [[...], ...],
@@ -131,7 +139,7 @@ Build an HNSW index over a dataset. Returns immediately; build runs asynchronous
 
 ```json
 {
-  "datasetId": "ds_53a1f2",
+  "datasetId": "ds_000001",
   "M": 16,
   "efConstruction": 200,
   "metric": "l2",          // l2 | cosine | inner_product
@@ -142,6 +150,10 @@ Build an HNSW index over a dataset. Returns immediately; build runs asynchronous
 
 **Defaults for omitted fields:** `M=16`, `efConstruction=200`, `metric="l2"`, `heuristic=true`, `seed=0`.
 
+**Limits:** `M` in `[2, 128]`, `efConstruction` in `[1, 10000]`. Values outside these ranges are rejected with
+`400 INVALID_REQUEST` and the server keeps running. `Mmax0` is not configurable over HTTP; the core default is
+`2*M`.
+
 **Build semantics:** the build runs asynchronously. While it runs, `GET /index/status` reports `building`
 and search/insert/stats requests return `INDEX_NOT_READY`. A second build request while a build is running
 is rejected with `409 INDEX_NOT_READY`. Rebuilding when an index is already `ready` is allowed: the previous
@@ -151,7 +163,7 @@ index is discarded, the new one is built from scratch and searches are unavailab
 
 ```json
 {
-  "indexId": "idx_7b1c9d",
+  "indexId": "idx_7f3a9c2e",
   "status": "building"
 }
 ```
@@ -167,7 +179,7 @@ Build status: `idle | building | ready | error`.
   "status": "building",
   "progress": 0.37,           // 0..1
   "elapsedMs": 1240,
-  "indexId": "idx_7b1c9d",
+  "indexId": "idx_7f3a9c2e",
   "error": null
 }
 ```
@@ -184,7 +196,7 @@ event: progress
 data: {"progress":0.37,"processed":3700,"total":10000}
 
 event: done
-data: {"indexId":"idx_7b1c9d"}
+data: {"indexId":"idx_7f3a9c2e"}
 ```
 
 On connect the server sends a snapshot of the current state (a `progress` event while building, a `done`
@@ -263,7 +275,8 @@ k-NN search. `efSearch` is passed per query; `ef = max(efSearch, k)` internally.
   "k": 10,
   "efSearch": 100,
   "mode": "hnsw",                 // hnsw | bruteforce
-  "trace": false                  // if true, include per-layer search path
+  "trace": false,                 // if true, include per-layer search path
+  "includeVectors": true          // set false to omit result vectors
 }
 ```
 
@@ -292,6 +305,10 @@ Distances in output have `sqrt` applied (actual L2 / cosine distance, not square
   compared against the decimal external id (`0` resolves the dataset row `"0"`).
 - `mode` defaults to `"hnsw"`. `efSearch` is optional: `ef = max(efSearch, k)`; when omitted or `0`
   it becomes `ef = k`.
+- `k` must be in `[1, 1000]` and `efSearch` in `[0, 10000]`; values outside these ranges return
+  `INVALID_REQUEST` (400).
+- `includeVectors` defaults to `true`. With `false` each result contains only `id`, `vectorId` and `distance`;
+  the `vector` field is omitted. Use it for large `k`/`dim` to keep responses small.
 - `trace` is honoured only for `mode="hnsw"`; brute-force responses never contain a `trace` field.
 - Errors: unknown `vectorId` → `INVALID_REQUEST` (400), `k > N` → `K_EXCEEDS_N` (400), wrong dimension →
   `INVALID_DIMENSION` (400), no index yet → `INDEX_NOT_FOUND` (404), building/error index →
@@ -303,9 +320,12 @@ values mean closer vectors (same convention as the internal index).
 
 ---
 
-### 5. Graph (visualization)
+### 5. Planned endpoints (not implemented)
 
-#### `GET /graph`
+The routes below are part of the design but are **not implemented**. They currently return `404 NOT_FOUND`.
+They are documented so the contract is stable before the frontend work starts.
+
+#### `GET /graph` (planned)
 
 Vertices and edges of a layer, with a vertex-count limit. PCA 2D coordinates are attached.
 
@@ -329,9 +349,7 @@ Vertices and edges of a layer, with a vertex-count limit. PCA 2D coordinates are
 
 ---
 
-### 6. Benchmark
-
-#### `POST /benchmark`
+#### `POST /benchmark` (planned)
 
 Run HNSW vs brute-force comparison over a parameter grid.
 
@@ -339,7 +357,7 @@ Run HNSW vs brute-force comparison over a parameter grid.
 
 ```json
 {
-  "indexId": "idx_7b1c9d",
+  "indexId": "idx_7f3a9c2e",
   "M": [8, 16, 32],
   "efConstruction": [100, 200],
   "efSearch": [10, 50, 100],
@@ -371,4 +389,4 @@ Run HNSW vs brute-force comparison over a parameter grid.
 }
 ```
 
-`POST /benchmark` is async in production; use `GET /benchmark/{id}` to poll (contract v1 returns inline for small grids).
+`POST /benchmark` is planned as an asynchronous job with `GET /benchmark/{id}` for polling.

@@ -40,7 +40,7 @@ func TestHNSWQualityMetrics(t *testing.T) {
 
 	var idx *hnsw.Index
 	buildTime, err := MeasureBuildTime(func() error {
-		idx = hnsw.New(hnsw.Config{
+		idx = hnsw.MustNew(hnsw.Config{
 			M:              16,
 			EfConstruction: 100,
 			Metric:         hnsw.MetricL2,

@@ -887,3 +887,90 @@ func doJSONHTTP(t *testing.T, baseURL, method, path string, body any) *httptest.
 	}
 	return rec
 }
+
+func TestBuildIndexValidatesLimits(t *testing.T) {
+	srv, _ := newTestAPI(t)
+	h := srv.Handler()
+
+	tests := []map[string]any{
+		{"datasetId": "ds_000001", "M": 1, "efConstruction": 50},
+		{"datasetId": "ds_000001", "M": 129, "efConstruction": 50},
+		{"datasetId": "ds_000001", "M": 8, "efConstruction": -1},
+		{"datasetId": "ds_000001", "M": 8, "efConstruction": 10_001},
+	}
+	for _, body := range tests {
+		rec := doJSON(t, h, http.MethodPost, basePath+"/index", body)
+		expectError(t, rec, http.StatusBadRequest, codeInvalidRequest)
+	}
+}
+
+func TestSearchValidatesLimitsAndIncludeVectors(t *testing.T) {
+	srv, mgr := newTestAPI(t)
+	h := srv.Handler()
+	readyIndex(t, h, mgr)
+
+	meta := decodeMap(t, doJSON(t, h, http.MethodGet, basePath+"/datasets", nil))
+	firstID := meta["datasets"].([]any)[0].(map[string]any)["id"].(string)
+	ds := decodeMap(t, doJSON(t, h, http.MethodGet, basePath+"/datasets/"+firstID, nil))
+	preview := ds["preview"].([]any)
+	query := make([]float32, testDatasetD)
+	for i, x := range preview[0].([]any) {
+		query[i] = float32(x.(float64))
+	}
+
+	rec := doJSON(t, h, http.MethodPost, basePath+"/search", map[string]any{
+		"vector": query, "k": testSearchK, "includeVectors": false,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	results := decodeMap(t, rec)["results"].([]any)
+	if len(results) == 0 {
+		t.Fatal("search returned no results")
+	}
+	for _, item := range results {
+		if _, ok := item.(map[string]any)["vector"]; ok {
+			t.Fatal("vector present with includeVectors=false")
+		}
+	}
+
+	rec = doJSON(t, h, http.MethodPost, basePath+"/search", map[string]any{
+		"vector": query, "k": testSearchK, "includeVectors": true,
+	})
+	results = decodeMap(t, rec)["results"].([]any)
+	if _, ok := results[0].(map[string]any)["vector"]; !ok {
+		t.Fatal("vector missing with includeVectors=true")
+	}
+
+	rec = doJSON(t, h, http.MethodPost, basePath+"/search", map[string]any{
+		"vector": query, "k": 1_001,
+	})
+	expectError(t, rec, http.StatusBadRequest, codeInvalidRequest)
+
+	rec = doJSON(t, h, http.MethodPost, basePath+"/search", map[string]any{
+		"vector": query, "k": 1, "efSearch": 10_001,
+	})
+	expectError(t, rec, http.StatusBadRequest, codeInvalidRequest)
+}
+
+func TestUploadTooLarge(t *testing.T) {
+	srv, _ := newTestAPI(t)
+	srv.maxUploadBytes = 512
+	h := srv.Handler()
+
+	content := strings.Repeat("1,2,3\n", 1024)
+	rec := multipartUpload(t, h, "vectors.csv", content)
+	expectError(t, rec, http.StatusRequestEntityTooLarge, codeFileTooLarge)
+}
+
+func TestStoreFullResponse(t *testing.T) {
+	store := dataset.NewStoreWithBudget(1)
+	mgr := indexmanager.New(store)
+	srv := NewServer(store, mgr)
+	t.Cleanup(mgr.Close)
+
+	rec := doJSON(t, srv.Handler(), http.MethodPost, basePath+"/datasets", map[string]any{
+		"action": "generate", "n": 1, "dim": 1,
+	})
+	expectError(t, rec, http.StatusInsufficientStorage, codeStoreFull)
+}

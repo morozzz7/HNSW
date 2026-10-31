@@ -3,31 +3,31 @@ PORT ?= 8080
 
 .PHONY: run test test-race bench vet lint tidy deps
 
-run: tidy
-	cd backend && $(GO) run ./cmd/server
+run:
+	$(GO) run ./cmd/server
 
 test:
-	cd backend && $(GO) test ./...
+	$(GO) test ./...
 
 test-race:
-	cd backend && $(GO) test -race ./...
+	$(GO) test -race ./...
 
 bench:
-	cd backend && $(GO) test -bench=. -benchmem ./...
+	$(GO) test -bench=. -benchmem ./...
 
 vet:
-	cd backend && $(GO) vet ./...
+	$(GO) vet ./...
 
-lint: 
-	cd backend && $(GO) fmt ./... && $(GO) vet ./...
+lint:
+	$(GO) fmt ./... && $(GO) vet ./...
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		cd backend && golangci-lint run ./...; \
+		golangci-lint run ./...; \
 	else \
 		echo "golangci-lint not installed; ran gofmt + go vet only"; \
 	fi
 
 tidy:
-	cd backend && $(GO) mod tidy
+	$(GO) mod tidy
 
 deps:
-	cd backend && $(GO) mod download
+	$(GO) mod download

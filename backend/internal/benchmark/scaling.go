@@ -137,14 +137,17 @@ func (c ScalingConfig) validate() error {
 	if c.K <= 0 {
 		return fmt.Errorf("scaling: k must be positive, got %d", c.K)
 	}
-	if c.EfSearch <= 0 {
-		return fmt.Errorf("scaling: efSearch must be positive, got %d", c.EfSearch)
+	if c.K > hnsw.MaxK {
+		return fmt.Errorf("scaling: k=%d exceeds limit %d", c.K, hnsw.MaxK)
 	}
-	if c.M <= 0 {
-		return fmt.Errorf("scaling: M must be positive, got %d", c.M)
+	if c.EfSearch <= 0 || c.EfSearch > hnsw.MaxEfSearch {
+		return fmt.Errorf("scaling: efSearch must be between 1 and %d, got %d", hnsw.MaxEfSearch, c.EfSearch)
 	}
-	if c.EfConstruction <= 0 {
-		return fmt.Errorf("scaling: efConstruction must be positive, got %d", c.EfConstruction)
+	if c.M < hnsw.MinM || c.M > hnsw.MaxM {
+		return fmt.Errorf("scaling: M must be between %d and %d, got %d", hnsw.MinM, hnsw.MaxM, c.M)
+	}
+	if c.EfConstruction < 1 || c.EfConstruction > hnsw.MaxEfConstruction {
+		return fmt.Errorf("scaling: efConstruction must be between 1 and %d, got %d", hnsw.MaxEfConstruction, c.EfConstruction)
 	}
 	if !validMetric(c.Metric) {
 		return fmt.Errorf("scaling: unknown metric %q", c.Metric)
@@ -174,13 +177,16 @@ func RunScaling(cfg ScalingConfig) ([]ScalingResult, error) {
 			return nil, fmt.Errorf("scaling: generate n=%d: %w", n, err)
 		}
 
-		idx := hnsw.New(hnsw.Config{
+		idx, err := hnsw.New(hnsw.Config{
 			M:              cfg.M,
 			EfConstruction: cfg.EfConstruction,
 			Metric:         cfg.Metric,
 			Seed:           cfg.Seed,
 			UseHeuristic:   cfg.UseHeuristic,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("scaling n=%d: %w", n, err)
+		}
 		buildTime, err := MeasureBuildTime(func() error {
 			for j, v := range vectors {
 				if _, err := idx.Insert(v, uint32(j)); err != nil {

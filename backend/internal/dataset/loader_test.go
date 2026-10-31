@@ -78,6 +78,71 @@ func TestLoadJSONEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadCSVEnforcesLimits(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		lim  loadLimits
+	}{
+		{"vectors", "1,2\n3,4\n5,6\n", loadLimits{maxVectors: 2, maxDim: 8, maxValues: 100}},
+		{"values", "1,2\n3,4\n", loadLimits{maxVectors: 10, maxDim: 8, maxValues: 3}},
+		{"dimension", "1,2,3\n", loadLimits{maxVectors: 10, maxDim: 2, maxValues: 100}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := loadCSV(strings.NewReader(tc.data), tc.lim); err == nil {
+				t.Fatal("loadCSV = nil error, want limit error")
+			}
+		})
+	}
+}
+
+func TestLoadJSONEnforcesLimits(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		lim  loadLimits
+	}{
+		{"vectors", `[[1,2],[3,4]]`, loadLimits{maxVectors: 1, maxDim: 8, maxValues: 100}},
+		{"values", `[[1,2],[3,4]]`, loadLimits{maxVectors: 10, maxDim: 8, maxValues: 3}},
+		{"dimension", `[[1,2,3]]`, loadLimits{maxVectors: 10, maxDim: 2, maxValues: 100}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := loadJSON(strings.NewReader(tc.data), tc.lim); err == nil {
+				t.Fatal("loadJSON = nil error, want limit error")
+			}
+		})
+	}
+}
+
+func TestLoadJSONRejectsTrailingData(t *testing.T) {
+	for _, data := range []string{`[[1,2]] []`, `{"vectors":[[1,2]]} {}`} {
+		if _, err := LoadJSON(strings.NewReader(data)); err == nil {
+			t.Fatalf("LoadJSON(%q) = nil error, want error", data)
+		}
+	}
+}
+
+func TestLoadJSONWrapperSkipsOtherFields(t *testing.T) {
+	data := `{"meta":{"source":"test"},"vectors":[[1,2],[3,4]],"dim":2}`
+	vecs, err := LoadJSON(strings.NewReader(data))
+	if err != nil {
+		t.Fatalf("LoadJSON = %v", err)
+	}
+	if len(vecs) != 2 || len(vecs[0]) != 2 {
+		t.Fatalf("got %d x %d, want 2 x 2", len(vecs), len(vecs[0]))
+	}
+}
+
+func TestLoadJSONRejectsInvalidShapes(t *testing.T) {
+	for _, data := range []string{`null`, `42`, `"vectors"`, `[],`, `{"meta":1}`, `{"vectors":null}`, `{"vectors":[[1,2]],"vectors":[[3,4]]}`} {
+		if _, err := LoadJSON(strings.NewReader(data)); err == nil {
+			t.Fatalf("LoadJSON(%q) = nil error, want error", data)
+		}
+	}
+}
+
 func writeFVecsFile(t *testing.T, vecs [][]float32) string {
 	t.Helper()
 	var buf bytes.Buffer

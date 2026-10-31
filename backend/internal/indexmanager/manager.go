@@ -6,8 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"runtime"
+	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -154,17 +157,18 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 	if cfg.DatasetID == "" {
 		return "", fmt.Errorf("%w: datasetId is required", ErrInvalid)
 	}
-	if cfg.M <= 0 {
-		return "", fmt.Errorf("%w: M must be positive", ErrInvalid)
+
+	hcfg := hnsw.Config{
+		M:              cfg.M,
+		Mmax0:          cfg.Mmax0,
+		EfConstruction: cfg.EfConstruction,
+		Metric:         cfg.Metric,
+		Seed:           cfg.Seed,
+		UseHeuristic:   cfg.UseHeuristic,
 	}
-	if cfg.Mmax0 < 0 {
-		return "", fmt.Errorf("%w: Mmax0 must not be negative", ErrInvalid)
-	}
-	if cfg.EfConstruction <= 0 {
-		return "", fmt.Errorf("%w: efConstruction must be positive", ErrInvalid)
-	}
-	if !validMetric(cfg.Metric) {
-		return "", fmt.Errorf("%w: unknown metric %q", ErrInvalid, cfg.Metric)
+	idx, err := hnsw.New(hcfg)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 
 	m.mu.Lock()
@@ -186,16 +190,6 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 		m.mu.Unlock()
 		return "", fmt.Errorf("%w: dataset is empty", ErrInvalid)
 	}
-
-	hcfg := hnsw.Config{
-		M:              cfg.M,
-		Mmax0:          cfg.Mmax0,
-		EfConstruction: cfg.EfConstruction,
-		Metric:         cfg.Metric,
-		Seed:           cfg.Seed,
-		UseHeuristic:   cfg.UseHeuristic,
-	}
-	idx := hnsw.New(hcfg)
 
 	vectors := make([][]float32, len(ds.Vectors))
 	copy(vectors, ds.Vectors)
@@ -219,7 +213,7 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 	m.extIDs = extIDs
 	m.extToInt = extToInt
 	m.nextExt = 0
-	m.metric = hcfg.Metric
+	m.metric = idx.Config().Metric
 	m.progress = 0
 	m.processed = 0
 	m.total = len(vectors)
@@ -238,6 +232,8 @@ func (m *Manager) StartBuild(cfg BuildConfig) (string, error) {
 }
 
 func (m *Manager) build(ctx context.Context, idx *hnsw.Index, vectors [][]float32, indexID string) {
+	defer m.recoverBuild(indexID)
+
 	total := len(vectors)
 	step := total / 100
 	if step < 1 {
@@ -320,6 +316,15 @@ func (m *Manager) failBuild(indexID, message string) {
 	m.elapsedMs = time.Since(m.startedAt).Milliseconds()
 	m.buildCancel = nil
 	m.publishLocked(Event{Type: EventError, Data: ErrorData{Message: message}})
+}
+
+func (m *Manager) recoverBuild(indexID string) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	log.Printf("indexmanager: build %s panic: %v\n%s", indexID, r, debug.Stack())
+	m.failBuild(indexID, fmt.Sprintf("build panic: %v", r))
 }
 
 func (m *Manager) Close() {
@@ -470,21 +475,16 @@ func (m *Manager) InsertVector(vector []float32, vectorID string) (uint32, strin
 		return 0, "", fmt.Errorf("%w: %q", ErrDuplicateID, vectorID)
 	}
 
-	snapshot := make([][]float32, len(m.vectors)+1)
-	copy(snapshot, m.vectors)
-	snapshot[len(m.vectors)] = vector
-	bf, err := bruteforce.NewWithWorkers(snapshot, hnsw.Distance(m.metric), runtime.GOMAXPROCS(0))
-	if err != nil {
-		return 0, "", fmt.Errorf("rebuild brute-force index: %w", err)
-	}
-
-	internal, err := m.idx.Insert(vector, uint32(len(m.vectors)))
+	vec := slices.Clone(vector)
+	internal, err := m.idx.Insert(vec, uint32(len(m.vectors)))
 	if err != nil {
 		return 0, "", err
 	}
+	if err := m.bf.Append(vec); err != nil {
+		return 0, "", fmt.Errorf("insert into brute-force index: %w", err)
+	}
 
-	m.vectors = snapshot
-	m.bf = bf
+	m.vectors = append(m.vectors, vec)
 	m.extIDs = append(m.extIDs, vectorID)
 	m.extToInt[vectorID] = internal
 	return internal, vectorID, nil

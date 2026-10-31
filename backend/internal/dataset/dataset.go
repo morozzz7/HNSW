@@ -9,9 +9,13 @@ import (
 )
 
 const (
-	MaxVectors = 1_000_000
-	MaxDim     = 8192
+	MaxVectors         = 1_000_000
+	MaxDim             = 8192
+	MaxValues          = 50_000_000
+	DefaultStoreBudget = int64(1 << 30)
 )
+
+var ErrStoreFull = errors.New("dataset: store budget exceeded")
 
 const previewRows = 10
 
@@ -75,6 +79,9 @@ func Validate(vectors [][]float32) error {
 	if dim > MaxDim {
 		return fmt.Errorf("dataset: dimension %d exceeds limit %d", dim, MaxDim)
 	}
+	if int64(len(vectors))*int64(dim) > MaxValues {
+		return fmt.Errorf("dataset: %d values exceeds limit %d", int64(len(vectors))*int64(dim), int64(MaxValues))
+	}
 
 	for i, v := range vectors {
 		if len(v) != dim {
@@ -117,27 +124,47 @@ func computeStats(vectors [][]float32) *Stats {
 	return &Stats{Min: min, Max: max, Mean: mean}
 }
 
+func (ds *Dataset) Bytes() int64 {
+	size := int64(ds.N) * int64(ds.Dim) * 4
+	if ds.Stats != nil {
+		size += int64(3*ds.Dim) * 4
+	}
+	return size
+}
+
 type Store struct {
 	mu       sync.RWMutex
 	datasets map[string]*Dataset
 	nextID   int
+	budget   int64
+	used     int64
 }
 
 func NewStore() *Store {
+	return NewStoreWithBudget(DefaultStoreBudget)
+}
+
+func NewStoreWithBudget(budget int64) *Store {
 	return &Store{
 		datasets: make(map[string]*Dataset),
 		nextID:   1,
+		budget:   budget,
 	}
 }
 
-func (s *Store) Add(ds *Dataset) string {
+func (s *Store) Add(ds *Dataset) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	size := ds.Bytes()
+	if s.used+size > s.budget {
+		return "", fmt.Errorf("%w: dataset needs %d bytes, %d of %d in use", ErrStoreFull, size, s.used, s.budget)
+	}
 	id := fmt.Sprintf("ds_%06d", s.nextID)
 	s.nextID++
 	ds.ID = id
 	s.datasets[id] = ds
-	return id
+	s.used += size
+	return id, nil
 }
 
 func (s *Store) Get(id string) *Dataset {
@@ -161,10 +188,12 @@ func (s *Store) List() []*Dataset {
 func (s *Store) Remove(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.datasets[id]; !ok {
+	ds, ok := s.datasets[id]
+	if !ok {
 		return false
 	}
 	delete(s.datasets, id)
+	s.used -= ds.Bytes()
 	return true
 }
 

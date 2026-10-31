@@ -115,22 +115,25 @@ func (c GridConfig) validate() error {
 	if c.K <= 0 {
 		return fmt.Errorf("grid: k must be positive, got %d", c.K)
 	}
+	if c.K > hnsw.MaxK {
+		return fmt.Errorf("grid: k=%d exceeds limit %d", c.K, hnsw.MaxK)
+	}
 	if c.K > len(c.Vectors) {
 		return fmt.Errorf("grid: k=%d exceeds number of vectors %d", c.K, len(c.Vectors))
 	}
 	for _, m := range c.M {
-		if m <= 0 {
-			return fmt.Errorf("grid: M must be positive, got %d", m)
+		if m < hnsw.MinM || m > hnsw.MaxM {
+			return fmt.Errorf("grid: M must be between %d and %d, got %d", hnsw.MinM, hnsw.MaxM, m)
 		}
 	}
 	for _, efC := range c.EfConstruction {
-		if efC <= 0 {
-			return fmt.Errorf("grid: efConstruction must be positive, got %d", efC)
+		if efC < 1 || efC > hnsw.MaxEfConstruction {
+			return fmt.Errorf("grid: efConstruction must be between 1 and %d, got %d", hnsw.MaxEfConstruction, efC)
 		}
 	}
 	for _, efS := range c.EfSearch {
-		if efS <= 0 {
-			return fmt.Errorf("grid: efSearch must be positive, got %d", efS)
+		if efS < 1 || efS > hnsw.MaxEfSearch {
+			return fmt.Errorf("grid: efSearch must be between 1 and %d, got %d", hnsw.MaxEfSearch, efS)
 		}
 	}
 	for _, metric := range c.Metric {
@@ -174,13 +177,17 @@ func RunGrid(cfg GridConfig) ([]Result, error) {
 			for _, metric := range cfg.Metric {
 				gt := exact[metric]
 				for _, heuristic := range cfg.UseHeuristic {
-					idx := hnsw.New(hnsw.Config{
+					idx, err := hnsw.New(hnsw.Config{
 						M:              m,
 						EfConstruction: efC,
 						Metric:         metric,
 						Seed:           cfg.Seed,
 						UseHeuristic:   heuristic,
 					})
+					if err != nil {
+						return nil, fmt.Errorf("grid M=%d efConstruction=%d metric=%s heuristic=%t: %w",
+							m, efC, metric, heuristic, err)
+					}
 
 					buildTime, err := MeasureBuildTime(func() error {
 						for i, v := range cfg.Vectors {

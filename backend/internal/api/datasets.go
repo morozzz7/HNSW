@@ -13,8 +13,6 @@ import (
 	"hnsw-coursework/internal/dataset"
 )
 
-const maxGenerateValues = 50_000_000
-
 type createDatasetResponse struct {
 	ID      string      `json:"id"`
 	N       int         `json:"n"`
@@ -61,12 +59,12 @@ func (s *Server) handleCreateDataset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createDatasetFromUpload(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadBytes)
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
 			writeError(w, http.StatusRequestEntityTooLarge, codeFileTooLarge,
-				fmt.Sprintf("upload exceeds %d bytes", int64(maxUploadBytes)))
+				fmt.Sprintf("upload exceeds %d bytes", s.maxUploadBytes))
 			return
 		}
 		writeError(w, http.StatusBadRequest, codeInvalidRequest, "invalid multipart form: "+err.Error())
@@ -106,7 +104,10 @@ func (s *Server) createDatasetFromUpload(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, codeInvalidRequest, err.Error())
 		return
 	}
-	s.store.Add(ds)
+	if _, err := s.store.Add(ds); err != nil {
+		writeError(w, http.StatusInsufficientStorage, codeStoreFull, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusCreated, createDatasetResponse{
 		ID: ds.ID, N: ds.N, Dim: ds.Dim, Preview: ds.Preview,
 	})
@@ -150,9 +151,9 @@ func (s *Server) createDatasetFromGenerate(w http.ResponseWriter, r *http.Reques
 			fmt.Sprintf("dim=%d exceeds limit %d", req.Dim, dataset.MaxDim))
 		return
 	}
-	if int64(req.N)*int64(req.Dim) > maxGenerateValues {
+	if int64(req.N)*int64(req.Dim) > dataset.MaxValues {
 		writeError(w, http.StatusBadRequest, codeInvalidRequest,
-			fmt.Sprintf("n*dim=%d exceeds generation limit %d", int64(req.N)*int64(req.Dim), int64(maxGenerateValues)))
+			fmt.Sprintf("n*dim=%d exceeds generation limit %d", int64(req.N)*int64(req.Dim), int64(dataset.MaxValues)))
 		return
 	}
 
@@ -166,7 +167,10 @@ func (s *Server) createDatasetFromGenerate(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, codeInvalidRequest, err.Error())
 		return
 	}
-	s.store.Add(ds)
+	if _, err := s.store.Add(ds); err != nil {
+		writeError(w, http.StatusInsufficientStorage, codeStoreFull, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusCreated, createDatasetResponse{
 		ID: ds.ID, N: ds.N, Dim: ds.Dim, Preview: ds.Preview,
 	})

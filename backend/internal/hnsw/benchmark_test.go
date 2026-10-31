@@ -10,7 +10,7 @@ func benchIndex(b *testing.B, n, dim, M, efC int) *Index {
 	cfg.M = M
 	cfg.EfConstruction = efC
 	cfg.Seed = 1
-	idx := New(cfg)
+	idx := MustNew(cfg)
 	r := rand.New(rand.NewSource(7))
 	for i := 0; i < n; i++ {
 		v := make([]float32, dim)
@@ -36,7 +36,7 @@ func BenchmarkInsert(b *testing.B) {
 		cfg.M = M
 		cfg.EfConstruction = efC
 		cfg.Seed = int64(i)
-		idx := New(cfg)
+		idx := MustNew(cfg)
 		for j := 0; j < 1000; j++ {
 			v := make([]float32, dim)
 			for k := range v {
@@ -47,7 +47,6 @@ func BenchmarkInsert(b *testing.B) {
 			}
 		}
 	}
-	_ = benchIndex(b, 1000, dim, M, efC)
 }
 
 func BenchmarkSearch(b *testing.B) {

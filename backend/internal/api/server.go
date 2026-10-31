@@ -31,6 +31,7 @@ const (
 	codeSearchFailed        = "SEARCH_FAILED"
 	codeFileTooLarge        = "FILE_TOO_LARGE"
 	codeUnsupportedFileType = "UNSUPPORTED_FILE_TYPE"
+	codeStoreFull           = "STORE_FULL"
 	codeNotFound            = "NOT_FOUND"
 	codeMethodNotAllowed    = "METHOD_NOT_ALLOWED"
 	codeInternalError       = "INTERNAL_ERROR"
@@ -46,16 +47,18 @@ type errorEnvelope struct {
 }
 
 type Server struct {
-	store *dataset.Store
-	mgr   *indexmanager.Manager
-	mux   *http.ServeMux
+	store          *dataset.Store
+	mgr            *indexmanager.Manager
+	mux            *http.ServeMux
+	maxUploadBytes int64
 }
 
 func NewServer(store *dataset.Store, mgr *indexmanager.Manager) *Server {
 	s := &Server{
-		store: store,
-		mgr:   mgr,
-		mux:   http.NewServeMux(),
+		store:          store,
+		mgr:            mgr,
+		mux:            http.NewServeMux(),
+		maxUploadBytes: maxUploadBytes,
 	}
 	s.routes()
 	return s

@@ -12,19 +12,20 @@ import (
 )
 
 type searchRequest struct {
-	Vector   []float32 `json:"vector"`
-	VectorID *FlexID   `json:"vectorId"`
-	K        int       `json:"k"`
-	EfSearch int       `json:"efSearch"`
-	Mode     string    `json:"mode"`
-	Trace    bool      `json:"trace"`
+	Vector         []float32 `json:"vector"`
+	VectorID       *FlexID   `json:"vectorId"`
+	K              int       `json:"k"`
+	EfSearch       int       `json:"efSearch"`
+	Mode           string    `json:"mode"`
+	Trace          bool      `json:"trace"`
+	IncludeVectors *bool     `json:"includeVectors"`
 }
 
 type searchResultResponse struct {
 	ID       uint32    `json:"id"`
 	VectorID string    `json:"vectorId"`
 	Distance float64   `json:"distance"`
-	Vector   []float32 `json:"vector"`
+	Vector   []float32 `json:"vector,omitempty"`
 }
 
 type traceLayerResponse struct {
@@ -58,12 +59,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, codeInvalidRequest, `mode must be "hnsw" or "bruteforce"`)
 		return
 	}
-	if req.K <= 0 {
-		writeError(w, http.StatusBadRequest, codeInvalidRequest, "k must be positive")
+	if req.K <= 0 || req.K > hnsw.MaxK {
+		writeError(w, http.StatusBadRequest, codeInvalidRequest,
+			fmt.Sprintf("k must be between 1 and %d", hnsw.MaxK))
 		return
 	}
-	if req.EfSearch < 0 {
-		writeError(w, http.StatusBadRequest, codeInvalidRequest, "efSearch must not be negative")
+	if req.EfSearch < 0 || req.EfSearch > hnsw.MaxEfSearch {
+		writeError(w, http.StatusBadRequest, codeInvalidRequest,
+			fmt.Sprintf("efSearch must be between 0 and %d", hnsw.MaxEfSearch))
 		return
 	}
 
@@ -124,6 +127,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if ef < req.K {
 		ef = req.K
 	}
+	includeVectors := true
+	if req.IncludeVectors != nil {
+		includeVectors = *req.IncludeVectors
+	}
 	metric := s.mgr.Metric()
 
 	var (
@@ -149,12 +156,15 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]searchResultResponse, len(results))
 	for i, res := range results {
-		out[i] = searchResultResponse{
+		item := searchResultResponse{
 			ID:       res.Internal,
 			VectorID: res.VectorID,
 			Distance: outputDistance(metric, res.Distance),
-			Vector:   res.Vector,
 		}
+		if includeVectors {
+			item.Vector = res.Vector
+		}
+		out[i] = item
 	}
 	resp := searchResponse{Results: out, Found: len(out), Trace: mapTrace(trace)}
 	writeJSON(w, http.StatusOK, resp)

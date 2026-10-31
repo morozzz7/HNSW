@@ -194,9 +194,9 @@ func TestRunGridValidation(t *testing.T) {
 		{"no vectors", func(c *GridConfig) { c.Vectors = nil }, "no vectors"},
 		{"no queries", func(c *GridConfig) { c.Queries = nil }, "no queries"},
 		{"k exceeds n", func(c *GridConfig) { c.K = 101 }, "exceeds number of vectors"},
-		{"bad M", func(c *GridConfig) { c.M = []int{0} }, "M must be positive"},
-		{"bad efConstruction", func(c *GridConfig) { c.EfConstruction = []int{0} }, "efConstruction must be positive"},
-		{"bad efSearch", func(c *GridConfig) { c.EfSearch = []int{0} }, "efSearch must be positive"},
+		{"bad M", func(c *GridConfig) { c.M = []int{0} }, "M must be between"},
+		{"bad efConstruction", func(c *GridConfig) { c.EfConstruction = []int{0} }, "efConstruction must be between"},
+		{"bad efSearch", func(c *GridConfig) { c.EfSearch = []int{0} }, "efSearch must be between"},
 		{"unknown metric", func(c *GridConfig) { c.Metric = []hnsw.Metric{"manhattan"} }, "unknown metric"},
 		{"query dim mismatch", func(c *GridConfig) {
 			c.Queries = mustGenerate(t, 3, dim+1, 9)

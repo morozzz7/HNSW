@@ -3,6 +3,7 @@ package bruteforce
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -15,6 +16,7 @@ type Result struct {
 }
 
 type Index struct {
+	mu      sync.RWMutex
 	vectors [][]float32
 	dim     int
 	dist    DistFunc
@@ -54,11 +56,34 @@ func newIndex(vectors [][]float32, dist DistFunc, workers int) (*Index, error) {
 	return &Index{vectors: vectors, dim: dim, dist: dist, workers: workers}, nil
 }
 
-func (ix *Index) Len() int { return len(ix.vectors) }
+func (ix *Index) Len() int {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+	return len(ix.vectors)
+}
 
-func (ix *Index) Dim() int { return ix.dim }
+func (ix *Index) Dim() int {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+	return ix.dim
+}
+
+func (ix *Index) Append(vector []float32) error {
+	if len(vector) == 0 {
+		return errors.New("bruteforce: zero-dimensional vector")
+	}
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	if len(vector) != ix.dim {
+		return fmt.Errorf("bruteforce: vector dimension %d does not match index dimension %d", len(vector), ix.dim)
+	}
+	ix.vectors = append(ix.vectors, slices.Clone(vector))
+	return nil
+}
 
 func (ix *Index) Search(q []float32, k int) ([]Result, error) {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
 	if len(q) != ix.dim {
 		return nil, fmt.Errorf("bruteforce: query dimension %d does not match index dimension %d", len(q), ix.dim)
 	}

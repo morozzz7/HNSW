@@ -2,6 +2,7 @@ package indexmanager
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,9 @@ func newTestManager(t *testing.T, n, dim int) (*Manager, *dataset.Dataset) {
 		t.Fatalf("new dataset: %v", err)
 	}
 	store := dataset.NewStore()
-	store.Add(ds)
+	if _, err := store.Add(ds); err != nil {
+		t.Fatalf("store add: %v", err)
+	}
 	mgr := New(store)
 	t.Cleanup(mgr.Close)
 	return mgr, ds
@@ -202,5 +205,45 @@ func TestNotReadyErrors(t *testing.T) {
 	}
 	if _, err := mgr.StartBuild(BuildConfig{DatasetID: "x", M: -1, EfConstruction: 50, Metric: hnsw.MetricL2}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("invalid M error = %v, want ErrInvalid", err)
+	}
+}
+
+func TestStartBuildRejectsInvalidConfig(t *testing.T) {
+	mgr, _ := newTestManager(t, 4, 2)
+	tests := []BuildConfig{
+		{DatasetID: "x", M: 1, EfConstruction: 50, Metric: hnsw.MetricL2},
+		{DatasetID: "x", M: 129, EfConstruction: 50, Metric: hnsw.MetricL2},
+		{DatasetID: "x", M: 8, EfConstruction: 10_001, Metric: hnsw.MetricL2},
+		{DatasetID: "x", M: 8, EfConstruction: 50, Metric: "manhattan"},
+	}
+	for _, cfg := range tests {
+		if _, err := mgr.StartBuild(cfg); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("StartBuild(%+v) = %v, want ErrInvalid", cfg, err)
+		}
+	}
+}
+
+func TestRecoverBuildMarksError(t *testing.T) {
+	mgr := New(dataset.NewStore())
+	t.Cleanup(mgr.Close)
+
+	const indexID = "idx_test"
+	mgr.mu.Lock()
+	mgr.status = StatusBuilding
+	mgr.indexID = indexID
+	mgr.startedAt = time.Now()
+	mgr.mu.Unlock()
+
+	func() {
+		defer mgr.recoverBuild(indexID)
+		panic("boom")
+	}()
+
+	st := mgr.Status()
+	if st.Status != StatusError {
+		t.Fatalf("status = %s, want %s", st.Status, StatusError)
+	}
+	if !strings.Contains(st.Error, "boom") {
+		t.Fatalf("error = %q, want it to mention boom", st.Error)
 	}
 }

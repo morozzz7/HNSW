@@ -2,12 +2,40 @@ package projection
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
 )
 
+const (
+	DefaultMaxDim    = 512
+	DefaultMaxSample = 50_000
+)
+
+var ErrDimensionTooLarge = errors.New("projection: dimension exceeds PCA limit")
+
+type Options struct {
+	MaxDim    int
+	MaxSample int
+}
+
+func DefaultOptions() Options {
+	return Options{MaxDim: DefaultMaxDim, MaxSample: DefaultMaxSample}
+}
+
 func PCA2D(vectors [][]float32) ([][2]float64, error) {
+	return PCA2DWithOptions(vectors, DefaultOptions())
+}
+
+func PCA2DWithOptions(vectors [][]float32, opts Options) ([][2]float64, error) {
+	if opts.MaxDim <= 0 {
+		opts.MaxDim = DefaultMaxDim
+	}
+	if opts.MaxSample <= 0 {
+		opts.MaxSample = DefaultMaxSample
+	}
+
 	n := len(vectors)
 	if n == 0 {
 		return nil, errors.New("projection: no vectors")
@@ -15,6 +43,9 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 	dim := len(vectors[0])
 	if dim == 0 {
 		return nil, errors.New("projection: zero-dimensional vector")
+	}
+	if dim > opts.MaxDim {
+		return nil, fmt.Errorf("%w: dimension %d exceeds limit %d", ErrDimensionTooLarge, dim, opts.MaxDim)
 	}
 	for _, v := range vectors {
 		if len(v) != dim {
@@ -32,28 +63,31 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 		mean[j] /= float64(n)
 	}
 
-	centered := make([][]float64, n)
-	for i, v := range vectors {
-		c := make([]float64, dim)
-		for j, x := range v {
-			c[j] = float64(x) - mean[j]
+	sampleN := n
+	if sampleN > opts.MaxSample {
+		sampleN = opts.MaxSample
+	}
+	sampleIndex := func(i int) int {
+		if sampleN == n {
+			return i
 		}
-		centered[i] = c
+		return int(int64(i) * int64(n) / int64(sampleN))
 	}
 
 	cov := make([][]float64, dim)
 	for i := range cov {
 		cov[i] = make([]float64, dim)
 	}
-	divisor := float64(n)
-	if n > 1 {
-		divisor = float64(n - 1)
+	divisor := float64(sampleN)
+	if sampleN > 1 {
+		divisor = float64(sampleN - 1)
 	}
 	for i := 0; i < dim; i++ {
 		for j := i; j < dim; j++ {
 			var sum float64
-			for k := 0; k < n; k++ {
-				sum += centered[k][i] * centered[k][j]
+			for s := 0; s < sampleN; s++ {
+				v := vectors[sampleIndex(s)]
+				sum += (float64(v[i]) - mean[i]) * (float64(v[j]) - mean[j])
 			}
 			val := sum / divisor
 			cov[i][j] = val
@@ -68,18 +102,14 @@ func PCA2D(vectors [][]float32) ([][2]float64, error) {
 		k = dim
 	}
 	coords := make([][2]float64, n)
-	for i := 0; i < n; i++ {
+	for i, v := range vectors {
 		for j := 0; j < k; j++ {
 			var acc float64
 			ev := eigenvectors[j]
 			for d := 0; d < dim; d++ {
-				acc += centered[i][d] * ev[d]
+				acc += (float64(v[d]) - mean[d]) * ev[d]
 			}
-			if j == 0 {
-				coords[i][0] = acc
-			} else {
-				coords[i][1] = acc
-			}
+			coords[i][j] = acc
 		}
 	}
 	return coords, nil

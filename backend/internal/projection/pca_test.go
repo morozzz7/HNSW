@@ -1,6 +1,7 @@
 package projection
 
 import (
+	"errors"
 	"math"
 	"testing"
 )
@@ -78,6 +79,36 @@ func TestPCA2DAxisAligned(t *testing.T) {
 	}
 	if spreadX <= spreadY {
 		t.Fatalf("PC1 spread %v not larger than PC2 spread %v", spreadX, spreadY)
+	}
+}
+
+func TestPCA2DRejectsLargeDimension(t *testing.T) {
+	vectors := make([][]float32, 2)
+	vectors[0] = make([]float32, DefaultMaxDim+1)
+	vectors[1] = make([]float32, DefaultMaxDim+1)
+	if _, err := PCA2D(vectors); !errors.Is(err, ErrDimensionTooLarge) {
+		t.Fatalf("PCA2D(oversized dim) = %v, want ErrDimensionTooLarge", err)
+	}
+}
+
+func TestPCA2DSamplesForCovariance(t *testing.T) {
+	vectors := [][]float32{{0, 0}, {1, 1}, {2, 0}, {3, 1}, {4, 0}}
+	opts := Options{MaxDim: 16, MaxSample: 2}
+	coords, err := PCA2DWithOptions(vectors, opts)
+	if err != nil {
+		t.Fatalf("PCA2DWithOptions = %v", err)
+	}
+	if len(coords) != len(vectors) {
+		t.Fatalf("len = %d, want %d", len(coords), len(vectors))
+	}
+	again, err := PCA2DWithOptions(vectors, opts)
+	if err != nil {
+		t.Fatalf("PCA2DWithOptions second run = %v", err)
+	}
+	for i := range coords {
+		if coords[i] != again[i] {
+			t.Fatalf("not deterministic at %d: %v vs %v", i, coords[i], again[i])
+		}
 	}
 }
 

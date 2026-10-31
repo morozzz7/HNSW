@@ -187,3 +187,72 @@ func TestRecall(t *testing.T) {
 		t.Fatalf("recall with longer exact list = %v, want %v", got, 2.0/3.0)
 	}
 }
+
+func TestAppend(t *testing.T) {
+	idx, err := New([][]float32{{0, 0}, {10, 10}}, hnsw.SquaredL2)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	v := []float32{1, 1}
+	if err := idx.Append(v); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	v[0], v[1] = 100, 100
+
+	if got := idx.Len(); got != 3 {
+		t.Fatalf("Len = %d, want 3", got)
+	}
+	res, err := idx.Search([]float32{1, 1}, 1)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(res) != 1 || res[0].ID != 2 || res[0].Dist != 0 {
+		t.Fatalf("Search = %+v, want id 2 at distance 0", res)
+	}
+}
+
+func TestAppendValidation(t *testing.T) {
+	idx, err := New([][]float32{{0, 0}}, hnsw.SquaredL2)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := idx.Append(nil); err == nil {
+		t.Fatal("Append(nil) = nil error, want error")
+	}
+	if err := idx.Append([]float32{1, 2, 3}); err == nil {
+		t.Fatal("Append(wrong dimension) = nil error, want error")
+	}
+	if got := idx.Len(); got != 1 {
+		t.Fatalf("Len = %d, want 1", got)
+	}
+}
+
+func TestConcurrentAppendAndSearch(t *testing.T) {
+	idx, err := New([][]float32{{0, 0, 0, 0}}, hnsw.SquaredL2)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	const writers = 8
+	const perWriter = 100
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < writers; i++ {
+			for j := 0; j < perWriter; j++ {
+				if err := idx.Append([]float32{float32(i), float32(j), 0, 0}); err != nil {
+					t.Errorf("Append: %v", err)
+					return
+				}
+			}
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		if _, err := idx.Search([]float32{0, 0, 0, 0}, 5); err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+	}
+	<-done
+	if got, want := idx.Len(), 1+writers*perWriter; got != want {
+		t.Fatalf("Len = %d, want %d", got, want)
+	}
+}

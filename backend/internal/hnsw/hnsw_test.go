@@ -3,6 +3,7 @@ package hnsw
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestInsertAndSearchBasic(t *testing.T) {
 	cfg.Seed = 42
 	cfg.M = 8
 	cfg.EfConstruction = 100
-	idx := New(cfg)
+	idx := MustNew(cfg)
 
 	dim := 10
 	r := rand.New(rand.NewSource(1))
@@ -53,7 +54,7 @@ func TestInsertAndSearchBasic(t *testing.T) {
 func TestSearchKResults(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Seed = 7
-	idx := New(cfg)
+	idx := MustNew(cfg)
 
 	dim := 8
 	r := rand.New(rand.NewSource(3))
@@ -86,7 +87,7 @@ func TestDeterminism(t *testing.T) {
 		cfg.Seed = seed
 		cfg.M = 12
 		cfg.EfConstruction = 150
-		idx := New(cfg)
+		idx := MustNew(cfg)
 		r := rand.New(rand.NewSource(99))
 		dim := 12
 		n := 200
@@ -122,7 +123,7 @@ func TestGraphInvariants(t *testing.T) {
 	cfg.M = 8
 	cfg.Mmax0 = 16
 	cfg.EfConstruction = 200
-	idx := New(cfg)
+	idx := MustNew(cfg)
 
 	r := rand.New(rand.NewSource(11))
 	dim := 10
@@ -186,7 +187,7 @@ func TestGraphInvariants(t *testing.T) {
 func TestSearchWithTrace(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Seed = 3
-	idx := New(cfg)
+	idx := MustNew(cfg)
 
 	r := rand.New(rand.NewSource(5))
 	dim := 6
@@ -240,7 +241,7 @@ func TestQualityRecall(t *testing.T) {
 	cfg.M = 16
 	cfg.Mmax0 = 32
 	cfg.EfConstruction = 200
-	idx := New(cfg)
+	idx := MustNew(cfg)
 
 	dim := 16
 	n := 10000
@@ -266,13 +267,12 @@ func TestQualityRecall(t *testing.T) {
 		for i := 0; i < n; i++ {
 			gt[i] = cand{id: uint32(i), dist: SquaredL2(query, dataset[i])}
 		}
-		for i := 0; i < n; i++ {
-			for j := i + 1; j < n; j++ {
-				if gt[j].dist < gt[i].dist {
-					gt[i], gt[j] = gt[j], gt[i]
-				}
+		sort.Slice(gt, func(i, j int) bool {
+			if gt[i].dist != gt[j].dist {
+				return gt[i].dist < gt[j].dist
 			}
-		}
+			return gt[i].id < gt[j].id
+		})
 		gtSet := make(map[uint32]bool)
 		for i := 0; i < 10; i++ {
 			gtSet[gt[i].id] = true
@@ -299,7 +299,7 @@ func TestQualityRecall(t *testing.T) {
 
 func TestWrongDimensionRejected(t *testing.T) {
 	cfg := defaultConfig()
-	idx := New(cfg)
+	idx := MustNew(cfg)
 
 	if _, err := idx.Insert([]float32{1, 2, 3}, 0); err != nil {
 		t.Fatalf("first insert should set dim: %v", err)
@@ -310,7 +310,7 @@ func TestWrongDimensionRejected(t *testing.T) {
 }
 
 func TestEmptyIndexSearch(t *testing.T) {
-	idx := New(defaultConfig())
+	idx := MustNew(defaultConfig())
 	res, err := idx.Search([]float32{1, 2, 3}, 5, 10)
 	if err != nil {
 		t.Fatalf("search on empty index: %v", err)

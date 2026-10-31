@@ -1,5 +1,7 @@
 package hnsw
 
+import "slices"
+
 func (idx *Index) Insert(vector []float32, externalID uint32) (uint32, error) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -7,6 +9,7 @@ func (idx *Index) Insert(vector []float32, externalID uint32) (uint32, error) {
 	if err := idx.ensureDim(vector); err != nil {
 		return 0, err
 	}
+	vector = slices.Clone(vector)
 
 	level := idx.randomLevel()
 	internalID := uint32(len(idx.nodes))
@@ -49,7 +52,8 @@ func (idx *Index) Insert(vector []float32, externalID uint32) (uint32, error) {
 		Mmax := idx.config.Mmax(l)
 		W, _ := idx.searchLayer(vector, ep, idx.config.EfConstruction, l, false)
 
-		neighbors := selectNeighbors(vector, W, idx.nodes, idx.dist, Mmax, idx.config.UseHeuristic)
+		neighbors := selectNeighbors(vector, W, idx.nodes, idx.dist, Mmax, idx.config.UseHeuristic,
+			nd.id, l, idx.config.ExtendCandidates, idx.config.KeepPruned)
 
 		for _, nid := range neighbors {
 			addLinkLocked(nd, idx.nodes[nid], l)
@@ -59,7 +63,8 @@ func (idx *Index) Insert(vector []float32, externalID uint32) (uint32, error) {
 			e := idx.nodes[nid]
 			if len(e.neighbors[l]) > Mmax {
 				cand := neighborCandidates(e.vector, e.neighbors[l], idx.nodes, idx.dist)
-				newNeighbors := selectNeighbors(e.vector, cand, idx.nodes, idx.dist, Mmax, idx.config.UseHeuristic)
+				newNeighbors := selectNeighbors(e.vector, cand, idx.nodes, idx.dist, Mmax, idx.config.UseHeuristic,
+					e.id, l, idx.config.ExtendCandidates, idx.config.KeepPruned)
 				oldNeighbors := e.neighbors[l]
 				e.neighbors[l] = newNeighbors
 
