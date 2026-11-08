@@ -12,7 +12,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (backend scope), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 0.3 (frontend scaffolding) is still in the frontend agent's domain.
+**Current status:** Stage 0 (repository setup), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 6 (frontend) is complete: 6.0 (degree histogram), 6.1 (skeleton), 6.2 (API layer), 6.3 (MSW mocks), 6.4 (datasets), 6.5 (build form) and 6.6 (progress and graph stats) are done.
 
 ---
 
@@ -30,7 +30,7 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 - [x] 0.1 Structure: `backend/`, `frontend/`, `docs/`, `scripts/`, `.opencode/agent/`
 - [x] 0.2 `backend/`: `go mod init hnsw-coursework`, `Makefile` (run, test, bench, lint)
-- [~] 0.3 `frontend/`: Vite + React + TS (strict), Tailwind, ESLint, Prettier, Vitest
+- [x] 0.3 `frontend/`: Vite + React + TS (strict), Tailwind, ESLint, Prettier, Vitest
 - [x] 0.4 `.gitignore` (binaries, `node_modules`, datasets, `*.idx`)
 - [x] 0.5 `README.md` with run instructions (backend :8080, frontend :5173)
 - [x] 0.6 `docs/API.md`: first version of the contract (see backend agent)
@@ -110,12 +110,13 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 ## Stage 6. Frontend: skeleton, Dataset and Index pages
 
-- [ ] 6.1 Skeleton: routing, layout, navigation, theme
-- [ ] 6.2 API client, zod schemas, TanStack Query, error handling
-- [ ] 6.3 MSW mocks (`VITE_USE_MOCKS`) for backend-less development
-- [ ] 6.4 DatasetPage: drag&drop upload, generation, preview
-- [ ] 6.5 IndexPage: form `M`, `efConstruction`, metric, heuristic, seed + tooltips
-- [ ] 6.6 IndexPage: build progress (SSE), stats, degree histogram
+- [x] 6.0 `GET /index/stats`: `degreeHistogram` (backend, contract + tests)
+- [x] 6.1 Skeleton: routing, layout, navigation, theme
+- [x] 6.2 API client, zod schemas, TanStack Query, error handling
+- [x] 6.3 MSW mocks (`VITE_USE_MOCKS`) for backend-less development
+- [x] 6.4 DatasetPage: drag&drop upload, generation, preview
+- [x] 6.5 IndexPage: form `M`, `efConstruction`, metric, heuristic, seed + tooltips
+- [x] 6.6 IndexPage: build progress (SSE), stats, degree histogram
 
 ## Stage 7. Frontend: search and graph visualization: Chapter 2
 
@@ -165,7 +166,7 @@ _None yet._
 
 ## Blockers
 
-- 0.3: Vite + React + TS scaffolding — frontend agent's domain; backend agent must not touch `frontend/` (see `.opencode/agent/backend.md`).
+- None.
 
 ## Decisions
 
@@ -191,6 +192,10 @@ _None yet._
 - Algorithm 4 options `ExtendCandidates` and `KeepPruned` are implemented; both default to `false` to preserve existing benchmark results.
 - `backend/Makefile` assumes it is run from `backend/`; `make -C backend <target>` works from the repository root.
 - Reports in `docs/reports/` are not maintained (see `AGENTS.md`); only this plan, `docs/API.md` and `README.md` are kept in sync.
+- Frontend stack: Vite 8, React 19, TypeScript 6.0 (TypeScript 7 is not yet supported by `typescript-eslint`), Tailwind CSS 4 with CSS-first tokens, React Router 7 (declarative mode), TanStack Query 5, zod for runtime validation, MSW for backend-less development, Vitest + Testing Library, ESLint 10 + Prettier.
+- The Vite dev server runs on the fixed port `5173` and proxies `/api` to `http://localhost:8080`, so the UI does not depend on CORS; `strictPort` prevents a silent move to `5174`.
+- UI primitives are written in the repository on top of Tailwind and `lucide-react` (no component library). Design direction: graphite neutrals with a cool-green tint, mint accent for HNSW, amber for brute force, dark theme by default plus a light theme; Inter Variable for text and JetBrains Mono for numbers, both self-hosted via `@fontsource`.
+- `degreeHistogram` in `GET /index/stats` is a sparse list `[{degree, count}]` sorted by `degree`; it covers the same `(node, level)` pairs as `degreeDistribution`.
 
 ## Change log
 
@@ -204,3 +209,8 @@ _None yet._
 | 2026-10-27 | backend | Этап 3 (3.1–3.3): `backend/internal/bruteforce` — точный k-NN линейным сканом (последовательно и параллельно через `NewWithWorkers`; результат детерминирован, тай-брейк по id), `Recall` (recall@k по множеству id); `backend/internal/benchmark` — перцентили задержки p50/p95/p99 (линейная интерполяция), QPS по средней задержке, `MeasureBuildTime`, оценка памяти через `HeapInUse`; интеграционный тест качества HNSW vs bruteforce. Результаты: recall@10 = 1.0000 (n=3000, dim=16, M=16, efC=100, efSearch=50, 30 запросов), построение 165.6 мс, память 824 KiB, p50=0.033 мс, p95=0.052 мс, p99=0.066 мс, QPS ≈ 27 362. Бенчмарки: bruteforce 0.965 мс/запрос (n=10000, dim=16, k=10) ≈ 1036 QPS, параллельный (4 воркера) 0.316 мс ≈ 3163 QPS (ускорение ≈3.05×); HNSW 61.8 мкс/запрос (n=5000, efSearch=100). `hnsw.Search`/`SearchWithTrace` теперь возвращают экспортируемый `[]hnsw.Result` (`ID`, `Dist`) вместо внутреннего `item` — для сравнения из других пакетов и будущего API (поведение не менялось). `go vet`, `gofmt`, `go test`, `go test -race` — чисто. Отчёт: `docs/reports/2026-10-27_04_backend_etap-3_bruteforce-metrics.md`. |
 | 2026-10-29 | backend | Этап 4 (4.1–4.6): в `backend/internal/benchmark` добавлены `RunGrid` (сетка `M × efConstruction × efSearch × metric × heuristic`; индекс строится один раз на комбинацию и переиспользуется для всех `efSearch`, точный bruteforce-эталон считается один раз на метрику), `Result` с JSON-полями контракта (`recall@<k>` через `MarshalJSON`), `RunScaling` (по умолчанию N = 1k/10k/100k/1M, список N и число запросов конфигурируются), экспорт `WriteJSON`/`WriteCSV` и файловые обёртки со стабильным CSV-заголовком. Из-за грубого разрешения часов добавлена калибровка замеров: минимум из 5 проб должен достичь 1 мс, до 4096 повторов; тест Этапа 3 переведён на общие `measureExact`/`measureSearch`. Проверка: `gofmt` по изменённым файлам чисто, `go vet ./...` — ok, `go test ./... -count=1` — ok, `go test -race ./internal/benchmark ./internal/bruteforce` — ok, `go test ./internal/benchmark -count=3` — ok. Эксперимент (n=5000, dim=16, 100 запросов, k=10): recall@10 = 1.0000 при M=8/efC=200/efSearch=100 (QPS ≈ 13 932); при recall ≥ 0.99 ускорение против перебора ≈ 6.6–19.3×, при efSearch=10 — до ≈ 79×; heuristic vs simple: при efSearch=10 recall 0.862 vs 0.928, построение 967 vs 1438 мс; l2 vs cosine: близкий recall, cosine медленнее на 10–20 %. Масштабирование 1k→10k→100k: QPS 16 696 → 7 176 → 6 025, построение 104.6 мс → 2.17 с → 57.5 с, ускорение 1.84× → 10.41× → 103.81×; точка 1M не запускалась (не проверена). Отчёт: `docs/reports/2026-10-29_01_backend_etap-4-benchmark-modul.md`. |
 | 2026-10-29 | backend | Этап 5 (5.1–5.5): HTTP API на стандартном `net/http` + `internal/indexmanager`. Добавлены `cmd/server` (PORT, signal.NotifyContext, graceful `Shutdown`), `internal/api` (`Server`/`Handler`, CORS для `localhost:5173`, единый конверт ошибок, `FlexID`, panic-recovery, `GET /health`), `POST/GET /datasets` (multipart `.csv`/`.json` до 256 MiB и generate с лимитом `n*dim ≤ 50M`), `POST /index` (202, асинхронная сборка, пересборка заменяет индекс, вторая сборка → 409), `GET /index/status`, SSE `GET /index/events` (`progress`/`done`/`error`, снимок состояния, heartbeat, закрытие), `GET /index/stats` (`nodesPerLevel`, `degreeDistribution {min,max,mean,p50}`), `POST /vectors` (id `ext_<n>`, синхронное обновление bruteforce и id-маппинга), `POST /search` (`hnsw`/`bruteforce`, `vector` или `vectorId` строкой/числом, `ef = max(efSearch,k)`, `trace` только для HNSW, L2 с `sqrt`, cosine и inner product документированы). Контракт `docs/API.md` расширен health-эндпоинтом, кодами `FILE_TOO_LARGE`/`UNSUPPORTED_FILE_TYPE`/`NOT_FOUND`/`METHOD_NOT_ALLOWED`/`INTERNAL_ERROR`, значениями по умолчанию и семантикой id/расстояний. Проверка: `gofmt` по затронутым файлам чисто, `go vet ./...` — ok, `go build ./...` — ok, `go test ./... -count=1` — ok (api 0.101s, indexmanager 0.085s, cmd/server 0.123s), `go test -race ./... -count=1` — ok (api 1.284s, indexmanager 1.366s, cmd/server 1.145s, hnsw 231.499s). Ручной smoke на порту 18081: n=200/dim=8, сборка `idx_fd33405c` за 3 мс, 200 узлов, maxLevel=3, degree max=16/mean=8.16/p50=8; HNSW и bruteforce вернули одинаковый top-5 (recall@5=1.0), trace слои 3→0, после вставки `custom` узел 200 найден с distance=0. Задачи 5.6–5.10 не реализовывались. Отчёт: `docs/reports/2026-10-29_02_backend_etap-5-http-api.md`. |
+| 2026-11-08 | frontend | Этап 6.0: `GET /index/stats` теперь возвращает `degreeHistogram` — список `{degree, count}`, отсортированный по `degree`; считается по тем же парам `(узел, уровень)`, что и `degreeDistribution`, сумма `count` равна сумме `nodesPerLevel`. Изменены `internal/indexmanager` (`Stats.DegreeHistogram`, `degreeBuckets`), `internal/api/index.go`, `docs/API.md`; добавлены проверки сортировки, положительных counts и инварианта суммы в `manager_test.go` и `api_test.go`. Проверка: `gofmt -l .` чисто, `go vet ./...` — ok, `go test ./internal/indexmanager ./internal/api ./internal/hnsw -count=1` — ok. |
+| 2026-11-08 | frontend | Этапы 0.3 и 6.1: скаффолд `frontend/` на Vite 8 + React 19 + TypeScript 6.0 (strict, `noUncheckedIndexedAccess`, alias `@/*`), Tailwind CSS 4 через `@tailwindcss/vite` с CSS-first токенами, ESLint 10 (flat config) + Prettier, Vitest + Testing Library + jsdom. Роутер на React Router 7: `/datasets`, `/index`, `/search`, `/benchmark`, редирект с `/` и 404 внутри общего шелла. Каркас: сайдбар 248px с группами навигации и активным состоянием, мобильное меню, переключатель тёмной/светлой темы с `localStorage` и `prefers-color-scheme`, дизайн-токены (графит с зелёным оттенком, мята/янтарь) и самохостинг Inter Variable + JetBrains Mono. Примитивы: Button, Card, Field/Input, Select, Switch, Badge, Stat, Progress, Table, Hint, EmptyState, ErrorBanner. Dev-сервер: `strictPort` 5173 и прокси `/api` → `:8080`. Проверка: `npm run lint` — ok, `npm run test` — 2 теста ok, `npm run build` — ok (`tsc -b` + vite build). |
+| 2026-11-08 | frontend | Этапы 6.2 и 6.3: API-слой (`src/api/client.ts` с таймаутом, ошибками `ApiError` и XHR-загрузкой с прогрессом; `endpoints.ts`, `keys.ts`, zod-схемы с клиентскими лимитами backend) и хуки TanStack Query (`useDatasets`, `useDataset`, `useGenerateDataset`, `useUploadDataset`, `useIndexStatus`, `useIndexStats`, `useBuildIndex`, `useHealth`, `useBuildProgress` с SSE и fallback-поллингом). MSW 3: in-memory состояние (`src/mocks/state.ts`) с двумя seed-датасетами, HTTP-хендлеры всех используемых маршрутов и настоящий SSE `GET /index/events`; `dev:mocks` поднимает воркер, тестовый setup запускает `msw/node`. Проверка: `npm run lint` — ok, `npm run test` — 17 тестов ok, `npm run build` — ok. | 
+| 2026-11-08 | frontend | Этап 6.4: `DatasetPage` — drag&drop загрузка `.csv`/`.json` с XHR-прогрессом и клиентскими проверками расширения/размера, форма генерации (`n`, `dim`, распределение, seed) с индикатором бюджета `n × dim ≤ 50 000 000`, список датасетов (активная строка, клавиатурная навигация) и карточка выбранного набора с превью первых 10 × 8 значений и статистикой min/mean/max по координатам. После загрузки/генерации новый набор выбирается автоматически. Тесты: `DatasetPage.test.tsx` (список, генерация, отклонение `.txt`). |
+| 2026-11-08 | frontend | Этапы 6.5–6.6: `IndexPage` — форма `datasetId`, `M` (2–128), `efConstruction` (1–10000), метрика, эвристика, seed с подсказками и zod-валидацией; карточка состояния (`idle`/`building`/`ready`/`error`) с прогрессом по SSE (fallback-поллинг), счётчиком `processed / total`, временем и `indexId`; при готовности — статистика графа (узлы, уровни, входная точка, M, efConstruction, min/p50/mean/max степеней), полосы узлов по уровням и гистограмма степеней; повтор сборки по last-config и «Повторить» после ошибки. SSE-поток синхронизирует статус через `refetch` по `done`/`error`. Тесты: `IndexPage.test.tsx` (пустое состояние, валидация M, прогресс, статистика). Проверка: `npm run lint` — ok, `npm run test` — 24 теста ok, `npm run build` — ok; ручной прогон в Chromium (Playwright, `dev:mocks`) — датасеты, детали, сборка, статистика и мобильный вид без ошибок в консоли. |

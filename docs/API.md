@@ -217,6 +217,7 @@ Index statistics after build.
   "entryPoint": 891,
   "nodesPerLevel": [10000, 3983, 1462, 537, 197, 72, 3],
   "degreeDistribution": { "min": 2, "max": 32, "mean": 16.4, "p50": 16 },
+  "degreeHistogram": [ { "degree": 2, "count": 14 }, { "degree": 3, "count": 51 } ],
   "metric": "l2",
   "M": 16,
   "efConstruction": 200
@@ -224,7 +225,9 @@ Index statistics after build.
 ```
 
 `degreeDistribution` is computed over every `(node, level)` pair present in the graph (level 0 dominates
-for typical `M`). The response may also include `indexId` and `datasetId`. `GET /index/stats` returns
+for typical `M`). `degreeHistogram` lists the same pairs bucketed by out-degree, sorted by `degree`
+ascending; the sum of `count` equals the number of `(node, level)` pairs, i.e. the sum of `nodesPerLevel`.
+The response may also include `indexId` and `datasetId`. `GET /index/stats` returns
 `INDEX_NOT_FOUND` (404) before the first build, `INDEX_NOT_READY` (409) while building, and `BUILD_FAILED`
 (500) if the build failed.
 

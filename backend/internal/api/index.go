@@ -38,12 +38,18 @@ type degreeDistributionResponse struct {
 	P50  int     `json:"p50"`
 }
 
+type degreeBucketResponse struct {
+	Degree int `json:"degree"`
+	Count  int `json:"count"`
+}
+
 type indexStatsResponse struct {
 	Nodes              int                        `json:"nodes"`
 	MaxLevel           int                        `json:"maxLevel"`
 	EntryPoint         uint32                     `json:"entryPoint"`
 	NodesPerLevel      []int                      `json:"nodesPerLevel"`
 	DegreeDistribution degreeDistributionResponse `json:"degreeDistribution"`
+	DegreeHistogram    []degreeBucketResponse     `json:"degreeHistogram"`
 	Metric             string                     `json:"metric"`
 	M                  int                        `json:"M"`
 	EfConstruction     int                        `json:"efConstruction"`
@@ -154,6 +160,10 @@ func (s *Server) handleIndexStats(w http.ResponseWriter, _ *http.Request) {
 		writeManagerError(w, err, codeIndexNotReady, http.StatusConflict)
 		return
 	}
+	histogram := make([]degreeBucketResponse, len(stats.DegreeHistogram))
+	for i, b := range stats.DegreeHistogram {
+		histogram[i] = degreeBucketResponse{Degree: b.Degree, Count: b.Count}
+	}
 	writeJSON(w, http.StatusOK, indexStatsResponse{
 		Nodes:         stats.Nodes,
 		MaxLevel:      stats.MaxLevel,
@@ -165,10 +175,11 @@ func (s *Server) handleIndexStats(w http.ResponseWriter, _ *http.Request) {
 			Mean: stats.DegreeDistribution.Mean,
 			P50:  stats.DegreeDistribution.P50,
 		},
-		Metric:         string(stats.Metric),
-		M:              stats.M,
-		EfConstruction: stats.EfConstruction,
-		IndexID:        stats.IndexID,
-		DatasetID:      stats.DatasetID,
+		DegreeHistogram: histogram,
+		Metric:          string(stats.Metric),
+		M:               stats.M,
+		EfConstruction:  stats.EfConstruction,
+		IndexID:         stats.IndexID,
+		DatasetID:       stats.DatasetID,
 	})
 }

@@ -1,0 +1,100 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --canvas: #f5f8f6;
+  --surface: #ffffff;
+  --surface-2: #edf2ef;
+  --surface-3: #e1e9e5;
+  --line: rgba(16, 25, 21, 0.12);
+  --line-strong: rgba(16, 25, 21, 0.24);
+  --ink: #101915;
+  --ink-2: #46564f;
+  --ink-3: #6c7d76;
+  --accent: #0b7a5f;
+  --accent-soft: rgba(11, 122, 95, 0.12);
+  --accent-ink: #ffffff;
+  --warn: #8a5d0c;
+  --warn-soft: rgba(224, 177, 91, 0.22);
+  --danger: #a8342a;
+  --danger-soft: rgba(224, 101, 91, 0.16);
+}
+
+.dark {
+  color-scheme: dark;
+  --canvas: #0b0f0e;
+  --surface: #111614;
+  --surface-2: #161d1a;
+  --surface-3: #1d2622;
+  --line: rgba(230, 243, 236, 0.09);
+  --line-strong: rgba(230, 243, 236, 0.18);
+  --ink: #e6efe9;
+  --ink-2: #a7b7af;
+  --ink-3: #7d8f87;
+  --accent: #5be0b5;
+  --accent-soft: rgba(91, 224, 181, 0.13);
+  --accent-ink: #05261c;
+  --warn: #e0b15b;
+  --warn-soft: rgba(224, 177, 91, 0.14);
+  --danger: #e0655b;
+  --danger-soft: rgba(224, 101, 91, 0.14);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv05' 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .hairline {
+    border-color: var(--line);
+  }
+
+  .tick-rule {
+    background-image: linear-gradient(to right, var(--line-strong) 1px, transparent 1px);
+    background-size: 8px 4px;
+    background-repeat: repeat-x;
+  }
+}

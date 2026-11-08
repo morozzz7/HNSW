@@ -480,6 +480,32 @@ func TestIndexBuildStatusStats(t *testing.T) {
 	if got := dd["mean"].(float64); got <= 0 {
 		t.Fatalf("degree mean = %v, want > 0", got)
 	}
+	hist, _ := stats["degreeHistogram"].([]any)
+	if len(hist) == 0 {
+		t.Fatal("degreeHistogram is empty")
+	}
+	pairs := 0
+	for _, v := range npl {
+		pairs += int(v.(float64))
+	}
+	histTotal := 0
+	prevDegree := -1
+	for _, raw := range hist {
+		bucket := raw.(map[string]any)
+		degree := int(bucket["degree"].(float64))
+		count := int(bucket["count"].(float64))
+		if degree <= prevDegree {
+			t.Fatalf("degreeHistogram not sorted ascending: %d after %d", degree, prevDegree)
+		}
+		if count <= 0 {
+			t.Fatalf("degreeHistogram count for degree %d = %d, want > 0", degree, count)
+		}
+		prevDegree = degree
+		histTotal += count
+	}
+	if histTotal != pairs {
+		t.Fatalf("degreeHistogram total = %d, want %d node-level pairs", histTotal, pairs)
+	}
 	if stats["metric"] != "l2" {
 		t.Fatalf("metric = %v, want l2", stats["metric"])
 	}

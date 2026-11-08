@@ -106,12 +106,18 @@ type DegreeDistribution struct {
 	P50  int
 }
 
+type DegreeBucket struct {
+	Degree int
+	Count  int
+}
+
 type Stats struct {
 	Nodes              int
 	MaxLevel           int
 	EntryPoint         uint32
 	NodesPerLevel      []int
 	DegreeDistribution DegreeDistribution
+	DegreeHistogram    []DegreeBucket
 	Metric             hnsw.Metric
 	M                  int
 	EfConstruction     int
@@ -503,6 +509,7 @@ func (m *Manager) Stats() (Stats, error) {
 		EntryPoint:         st.EntryPoint,
 		NodesPerLevel:      st.NodesPerLevel,
 		DegreeDistribution: degreeDistribution(st.DegreeHistogram),
+		DegreeHistogram:    degreeBuckets(st.DegreeHistogram),
 		Metric:             st.Metric,
 		M:                  st.M,
 		EfConstruction:     st.EfConstruction,
@@ -601,6 +608,18 @@ func validMetric(m hnsw.Metric) bool {
 	default:
 		return false
 	}
+}
+
+func degreeBuckets(hist map[int]int) []DegreeBucket {
+	buckets := make([]DegreeBucket, 0, len(hist))
+	for degree, count := range hist {
+		if count <= 0 {
+			continue
+		}
+		buckets = append(buckets, DegreeBucket{Degree: degree, Count: count})
+	}
+	sort.Slice(buckets, func(i, j int) bool { return buckets[i].Degree < buckets[j].Degree })
+	return buckets
 }
 
 func degreeDistribution(hist map[int]int) DegreeDistribution {

@@ -187,6 +187,30 @@ func TestBuildSearchInsertAndStats(t *testing.T) {
 	if stats.Nodes != 129 {
 		t.Fatalf("nodes after insert = %d, want 129", stats.Nodes)
 	}
+
+	pairs := 0
+	for _, n := range stats.NodesPerLevel {
+		pairs += n
+	}
+	buckets := stats.DegreeHistogram
+	if len(buckets) == 0 {
+		t.Fatal("degree histogram is empty")
+	}
+	total := 0
+	prevDegree := -1
+	for _, b := range buckets {
+		if b.Degree <= prevDegree {
+			t.Fatalf("degree histogram is not sorted ascending: %d after %d", b.Degree, prevDegree)
+		}
+		if b.Count <= 0 {
+			t.Fatalf("degree %d has non-positive count %d", b.Degree, b.Count)
+		}
+		prevDegree = b.Degree
+		total += b.Count
+	}
+	if total != pairs {
+		t.Fatalf("degree histogram total = %d, want %d node-level pairs", total, pairs)
+	}
 }
 
 func TestSecondBuildRejectedAndCloseCancels(t *testing.T) {
