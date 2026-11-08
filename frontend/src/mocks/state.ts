@@ -1,4 +1,14 @@
-import type { DegreeBucket, GenerateInput, Metric } from '@/api/schemas'
+import type {
+  DegreeBucket,
+  GenerateInput,
+  GraphEdge,
+  GraphResponse,
+  GraphVertex,
+  Metric,
+  SearchInput,
+  SearchResponse,
+  SearchResultItem,
+} from '@/api/schemas'
 
 export interface MockDataset {
   id: string
@@ -308,6 +318,130 @@ export function failMockBuild(message: string) {
   }
   index.status = 'error'
   index.error = message
+}
+
+export function mockGraph(level = 0, limit = 500, around?: string): GraphResponse | null {
+  const active = refreshIndex()
+  if (!active || active.status !== 'ready' || !active.stats) {
+    return null
+  }
+  const dataset = findDataset(active.datasetId)
+  if (!dataset) {
+    return null
+  }
+  if (level < 0 || level > active.stats.maxLevel) {
+    return null
+  }
+  const total = active.stats.nodesPerLevel[level] ?? 0
+  const count = Math.min(limit, total, 500)
+  const vertices: GraphVertex[] = []
+  const edges: GraphEdge[] = []
+
+  let aroundId: number | null = null
+  if (around !== undefined && around !== '') {
+    const parsed = parseInt(around, 10)
+    if (!Number.isNaN(parsed) && parsed >= 0 && parsed < dataset.n) {
+      aroundId = parsed
+    }
+  }
+
+  const selectedIds: number[] = []
+  if (aroundId !== null) {
+    selectedIds.push(aroundId)
+    for (let i = 1; i < count; i += 1) {
+      const nid = (aroundId + i * 3) % dataset.n
+      selectedIds.push(nid)
+    }
+  } else {
+    for (let i = 0; i < count; i += 1) {
+      selectedIds.push(i)
+    }
+  }
+
+  const idSet = new Set(selectedIds)
+
+  for (let idx = 0; idx < selectedIds.length; idx += 1) {
+    const id = selectedIds[idx]!
+    const angle = id * 2.39996
+    const radius = 10 * Math.sqrt(id + 1)
+    const x = Math.cos(angle) * radius * 0.1
+    const y = Math.sin(angle) * radius * 0.1
+    const nodeLevel = id % 7 === 0 ? Math.min(active.stats.maxLevel, 2) : 0
+    vertices.push({
+      id,
+      vectorId: String(id),
+      level: nodeLevel,
+      x,
+      y,
+      isEntryPoint: id === active.stats.entryPoint,
+    })
+  }
+
+  for (let idx = 0; idx < selectedIds.length; idx += 1) {
+    const u = selectedIds[idx]!
+    const deg = (u % 4) + 1
+    for (let j = 1; j <= deg; j += 1) {
+      const v = selectedIds[(idx + j * 2) % selectedIds.length]!
+      if (u < v && idSet.has(v)) {
+        edges.push({ from: u, to: v, level })
+      }
+    }
+  }
+
+  return {
+    level,
+    limit,
+    totalVertices: total,
+    vertices,
+    edges,
+  }
+}
+
+export function mockSearch(input: SearchInput): SearchResponse | null {
+  const active = refreshIndex()
+  if (!active || active.status !== 'ready' || !active.stats) {
+    return null
+  }
+  const dataset = findDataset(active.datasetId)
+  if (!dataset) {
+    return null
+  }
+  const k = Math.min(input.k, dataset.n)
+  const results: SearchResultItem[] = []
+  for (let i = 0; i < k; i += 1) {
+    const id = (i * 7 + 3) % dataset.n
+    results.push({
+      id,
+      vectorId: String(id),
+      distance: Math.round((0.15 + i * 0.12) * 1000) / 1000,
+      vector:
+        input.includeVectors !== false ? dataset.preview[i % dataset.preview.length] : undefined,
+    })
+  }
+
+  let trace: SearchResponse['trace'] = undefined
+  if (input.trace && input.mode !== 'bruteforce') {
+    const layers = []
+    for (let l = active.stats.maxLevel; l >= 0; l -= 1) {
+      const visited = [
+        active.stats.entryPoint,
+        (active.stats.entryPoint + l * 2 + 1) % dataset.n,
+        results[0]?.id ?? 0,
+      ]
+      layers.push({
+        level: l,
+        visited,
+        closest: l === 0 ? (results[0]?.id ?? 0) : visited[visited.length - 1]!,
+      })
+    }
+    trace = { layers }
+  }
+
+  return {
+    results,
+    found: results.length,
+    trace,
+  }
 }
 
 resetMockState()

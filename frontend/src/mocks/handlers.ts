@@ -7,6 +7,7 @@ import {
   MAX_VECTORS,
   buildIndexInputSchema,
   generateInputSchema,
+  searchInputSchema,
 } from '@/api/schemas'
 import type {
   BuildIndexInput,
@@ -20,8 +21,10 @@ import {
   currentIndex,
   findDataset,
   listDatasets,
+  mockGraph,
   mockIndexStats,
   mockIndexStatus,
+  mockSearch,
   startMockBuild,
 } from './state'
 
@@ -206,6 +209,62 @@ export const handlers = [
       return fail(500, 'BUILD_FAILED', status.error ?? 'Сборка индекса завершилась ошибкой')
     }
     return fail(404, 'INDEX_NOT_FOUND', 'Индекс ещё не построен')
+  }),
+
+  http.post(`${base}/search`, async ({ request }) => {
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return fail(400, 'INVALID_REQUEST', 'Тело запроса должно быть JSON')
+    }
+    const parsed = searchInputSchema.safeParse(raw)
+    if (!parsed.success) {
+      return fail(400, 'INVALID_REQUEST', validationMessage(parsed))
+    }
+    const status = mockIndexStatus()
+    if (status.status === 'building') {
+      return fail(409, 'INDEX_NOT_READY', 'Индекс ещё строится')
+    }
+    if (status.status !== 'ready') {
+      return fail(404, 'INDEX_NOT_FOUND', 'Индекс ещё не построен')
+    }
+    const searchRes = mockSearch(parsed.data)
+    if (!searchRes) {
+      return fail(500, 'SEARCH_FAILED', 'Ошибка выполнения поиска')
+    }
+    return HttpResponse.json(searchRes)
+  }),
+
+  http.get(`${base}/graph`, ({ request }) => {
+    const url = new URL(request.url)
+    const levelStr = url.searchParams.get('level')
+    const limitStr = url.searchParams.get('limit')
+    const around = url.searchParams.get('around') ?? undefined
+
+    const level = levelStr ? parseInt(levelStr, 10) : 0
+    const limit = limitStr ? parseInt(limitStr, 10) : 500
+
+    if (Number.isNaN(level) || level < 0) {
+      return fail(400, 'INVALID_REQUEST', 'level must be an integer >= 0')
+    }
+    if (Number.isNaN(limit) || limit < 1 || limit > 5000) {
+      return fail(400, 'INVALID_REQUEST', 'limit must be between 1 and 5000')
+    }
+
+    const status = mockIndexStatus()
+    if (status.status === 'building') {
+      return fail(409, 'INDEX_NOT_READY', 'Индекс ещё строится')
+    }
+    if (status.status !== 'ready') {
+      return fail(404, 'INDEX_NOT_FOUND', 'Индекс ещё не построен')
+    }
+
+    const graphRes = mockGraph(level, limit, around)
+    if (!graphRes) {
+      return fail(400, 'INVALID_REQUEST', 'Не удалось получить граф для уровня')
+    }
+    return HttpResponse.json(graphRes)
   }),
 
   sse<{ progress: IndexProgressEvent; done: IndexDoneEvent; error: IndexErrorEvent }>(

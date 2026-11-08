@@ -59,6 +59,9 @@ func (m *Manager) Graph(level int, limit int, around string) (Graph, error) {
 		if !ok {
 			return Graph{}, fmt.Errorf("%w: unknown around id %q", ErrInvalid, around)
 		}
+		if s.Nodes[id].MaxLevel < level {
+			return Graph{}, fmt.Errorf("%w: node %q is not present on level %d (maxLevel=%d)", ErrInvalid, around, level, s.Nodes[id].MaxLevel)
+		}
 		selected[id] = struct{}{}
 		for _, nid := range s.Nodes[id].Neighbors[level] {
 			if len(selected) < limit {
@@ -66,7 +69,10 @@ func (m *Manager) Graph(level int, limit int, around string) (Graph, error) {
 			}
 		}
 	} else {
-		for i := range s.Nodes {
+		for i, n := range s.Nodes {
+			if n.MaxLevel < level {
+				continue
+			}
 			if len(selected) == limit {
 				break
 			}
@@ -85,13 +91,22 @@ func (m *Manager) Graph(level int, limit int, around string) (Graph, error) {
 	}
 	edges := make([]GraphEdge, 0)
 	for _, id := range ids {
+		if s.Nodes[id].MaxLevel < level {
+			continue
+		}
 		for _, to := range s.Nodes[id].Neighbors[level] {
 			if _, ok := selected[to]; ok && id < to {
 				edges = append(edges, GraphEdge{From: id, To: to, Level: level})
 			}
 		}
 	}
-	return Graph{Level: level, Vertices: vertices, Edges: edges, TotalVertices: len(s.Nodes)}, nil
+	totalOnLevel := 0
+	for _, n := range s.Nodes {
+		if n.MaxLevel >= level {
+			totalOnLevel++
+		}
+	}
+	return Graph{Level: level, Vertices: vertices, Edges: edges, TotalVertices: totalOnLevel}, nil
 }
 
 type PersistMeta struct {

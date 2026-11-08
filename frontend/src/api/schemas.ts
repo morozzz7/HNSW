@@ -7,6 +7,12 @@ export const MAX_VALUES = 50_000_000
 export const MAX_M = 128
 export const MIN_M = 2
 export const MAX_EF_CONSTRUCTION = 10_000
+export const MIN_K = 1
+export const MAX_K = 1000
+export const MIN_EF_SEARCH = 0
+export const MAX_EF_SEARCH = 10_000
+export const MIN_GRAPH_LIMIT = 1
+export const MAX_GRAPH_LIMIT = 5000
 
 export const metricSchema = z.enum(['l2', 'cosine', 'inner_product'])
 export const distributionSchema = z.enum(['uniform', 'gaussian', 'clusters'])
@@ -147,6 +153,104 @@ export const indexProgressEventSchema = z.object({
 export const indexDoneEventSchema = z.object({ indexId: z.string() })
 
 export const indexErrorEventSchema = z.object({ message: z.string() })
+
+export const searchModeSchema = z.enum(['hnsw', 'bruteforce'])
+export const uiSearchModeSchema = z.enum(['hnsw', 'bruteforce', 'both'])
+
+export const searchInputSchema = z
+  .object({
+    vector: z.array(z.number()).optional(),
+    vectorId: z.union([z.string(), z.number()]).optional(),
+    k: z
+      .number()
+      .int()
+      .min(MIN_K, { message: `k от ${MIN_K} до ${MAX_K}` })
+      .max(MAX_K, { message: `k от ${MIN_K} до ${MAX_K}` }),
+    efSearch: z
+      .number()
+      .int()
+      .min(MIN_EF_SEARCH, { message: `efSearch от ${MIN_EF_SEARCH} до ${MAX_EF_SEARCH}` })
+      .max(MAX_EF_SEARCH, { message: `efSearch от ${MIN_EF_SEARCH} до ${MAX_EF_SEARCH}` })
+      .optional(),
+    mode: searchModeSchema.optional(),
+    trace: z.boolean().optional(),
+    includeVectors: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasVector = data.vector !== undefined && data.vector.length > 0
+    const hasVectorId = data.vectorId !== undefined && String(data.vectorId).trim().length > 0
+    if (!hasVector && !hasVectorId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Укажите вектор или его ID',
+        path: ['vector'],
+      })
+    }
+    if (hasVector && hasVectorId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Выберите либо вектор, либо ID (не оба одновременно)',
+        path: ['vector'],
+      })
+    }
+  })
+
+export const searchResultItemSchema = z.object({
+  id: z.number().int().nonnegative(),
+  vectorId: z.string(),
+  distance: z.number(),
+  vector: z.array(z.number()).optional(),
+})
+
+export const searchTraceLayerSchema = z.object({
+  level: z.number().int().nonnegative(),
+  visited: z.array(z.number().int().nonnegative()),
+  closest: z.number().int().nonnegative(),
+})
+
+export const searchTraceSchema = z.object({
+  layers: z.array(searchTraceLayerSchema),
+})
+
+export const searchResponseSchema = z.object({
+  results: z.array(searchResultItemSchema),
+  found: z.number().int().nonnegative(),
+  trace: searchTraceSchema.optional(),
+})
+
+export const graphVertexSchema = z.object({
+  id: z.number().int().nonnegative(),
+  vectorId: z.string(),
+  level: z.number().int().nonnegative(),
+  x: z.number(),
+  y: z.number(),
+  isEntryPoint: z.boolean(),
+})
+
+export const graphEdgeSchema = z.object({
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+  level: z.number().int().nonnegative(),
+})
+
+export const graphResponseSchema = z.object({
+  level: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  totalVertices: z.number().int().nonnegative(),
+  vertices: z.array(graphVertexSchema),
+  edges: z.array(graphEdgeSchema),
+})
+
+export type SearchMode = z.infer<typeof searchModeSchema>
+export type UISearchMode = z.infer<typeof uiSearchModeSchema>
+export type SearchInput = z.infer<typeof searchInputSchema>
+export type SearchResultItem = z.infer<typeof searchResultItemSchema>
+export type SearchTraceLayer = z.infer<typeof searchTraceLayerSchema>
+export type SearchTrace = z.infer<typeof searchTraceSchema>
+export type SearchResponse = z.infer<typeof searchResponseSchema>
+export type GraphVertex = z.infer<typeof graphVertexSchema>
+export type GraphEdge = z.infer<typeof graphEdgeSchema>
+export type GraphResponse = z.infer<typeof graphResponseSchema>
 
 export type DatasetListItem = z.infer<typeof datasetListItemSchema>
 export type Dataset = z.infer<typeof datasetSchema>

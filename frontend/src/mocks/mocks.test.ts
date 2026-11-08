@@ -105,4 +105,40 @@ describe('mock backend', () => {
       status: 409,
     })
   })
+
+  it('runs search and returns graph data when index is ready', async () => {
+    setMockBuildDuration(20)
+    const created = await api.generateDataset({
+      n: 100,
+      dim: 4,
+      distribution: 'uniform',
+      seed: 5,
+    })
+    await api.buildIndex({
+      datasetId: created.id,
+      M: 8,
+      efConstruction: 50,
+      metric: 'l2',
+      heuristic: true,
+      seed: 1,
+    })
+    await waitForReady()
+
+    const searchRes = await api.search({
+      vectorId: '0',
+      k: 5,
+      efSearch: 20,
+      mode: 'hnsw',
+      trace: true,
+    })
+    expect(searchRes.results).toHaveLength(5)
+    expect(searchRes.found).toBe(5)
+    expect(searchRes.trace?.layers.length).toBeGreaterThan(0)
+
+    const graphRes = await api.graph({ level: 0, limit: 50 })
+    expect(graphRes.level).toBe(0)
+    expect(graphRes.vertices.length).toBeGreaterThan(0)
+    expect(graphRes.vertices[0]).toHaveProperty('x')
+    expect(graphRes.vertices[0]).toHaveProperty('y')
+  })
 })

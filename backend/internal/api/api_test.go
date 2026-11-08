@@ -197,6 +197,15 @@ func TestGraphAndBenchmarkEndpoints(t *testing.T) {
 		t.Fatal("graph has no vertices")
 	}
 
+	recL1 := doJSON(t, h, http.MethodGet, basePath+"/graph?level=1&limit=10", nil)
+	if recL1.Code != http.StatusOK {
+		t.Fatalf("graph level=1 status = %d, body = %s", recL1.Code, recL1.Body.String())
+	}
+	graphL1 := decodeMap(t, recL1)
+	if graphL1["level"] != float64(1) {
+		t.Fatalf("unexpected graph level: %v", graphL1["level"])
+	}
+
 	rec = doJSON(t, h, http.MethodPost, basePath+"/benchmark", map[string]any{
 		"M": []int{buildM}, "efConstruction": []int{buildEfC}, "efSearch": []int{10}, "k": 3, "queries": 4,
 	})

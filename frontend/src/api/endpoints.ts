@@ -5,11 +5,19 @@ import {
   createdDatasetSchema,
   datasetListSchema,
   datasetSchema,
+  graphResponseSchema,
   healthSchema,
   indexStatsSchema,
   indexStatusSchema,
+  searchResponseSchema,
 } from './schemas'
-import type { BuildIndexInput, GenerateInput } from './schemas'
+import type {
+  BuildIndexInput,
+  GenerateInput,
+  GraphResponse,
+  SearchInput,
+  SearchResponse,
+} from './schemas'
 
 export const api = {
   health(signal?: AbortSignal) {
@@ -50,5 +58,32 @@ export const api = {
 
   indexStats(signal?: AbortSignal) {
     return request('/index/stats', indexStatsSchema, { signal })
+  },
+
+  search(input: SearchInput, signal?: AbortSignal): Promise<SearchResponse> {
+    return request('/search', searchResponseSchema, {
+      method: 'POST',
+      body: input,
+      signal,
+    })
+  },
+
+  graph(
+    params: { level?: number; limit?: number; around?: string } = {},
+    signal?: AbortSignal,
+  ): Promise<GraphResponse> {
+    const searchParams = new URLSearchParams()
+    if (params.level !== undefined) {
+      searchParams.set('level', String(params.level))
+    }
+    if (params.limit !== undefined) {
+      searchParams.set('limit', String(params.limit))
+    }
+    if (params.around !== undefined && params.around !== '') {
+      searchParams.set('around', params.around)
+    }
+    const query = searchParams.toString()
+    const path = query.length > 0 ? `/graph?${query}` : '/graph'
+    return request(path, graphResponseSchema, { signal })
   },
 }

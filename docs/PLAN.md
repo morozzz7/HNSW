@@ -12,7 +12,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (repository setup), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 6 (frontend) is complete: 6.0 (degree histogram), 6.1 (skeleton), 6.2 (API layer), 6.3 (MSW mocks), 6.4 (datasets), 6.5 (build form) and 6.6 (progress and graph stats) are done.
+**Current status:** Stage 0 (repository setup), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 6 (frontend skeleton, datasets, index build & stats) is complete. Stage 7 (frontend search, comparison, and graph visualization: 7.1–7.10) is complete.
 
 ---
 
@@ -120,16 +120,16 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 ## Stage 7. Frontend: search and graph visualization: Chapter 2
 
-- [ ] 7.1 SearchPage: query input, `k`, `efSearch`, mode HNSW / brute-force / both
-- [ ] 7.2 Results table + HNSW vs brute-force comparison (intersection, recall, time)
-- [ ] 7.3 GraphCanvas (Sigma.js + graphology): vertices and edges of the selected layer
-- [ ] 7.4 LayerSelector: switch layers `0..maxLevel`, node/edge counters
-- [ ] 7.5 Layout: PCA coordinates <-> force-directed
-- [ ] 7.6 NodeInfoPanel: node level, neighbors per layer, vector
-- [ ] 7.7 "Node neighborhood" mode (`around`, hop radius) and displayed-node limit
-- [ ] 7.8 SearchPathOverlay: step-by-step layer descent animation (back/forward/play)
-- [ ] 7.9 "Multilayer" mode (stacked layers, vertical links)
-- [ ] 7.10 Legend, layer colors, entry point highlight
+- [x] 7.1 SearchPage: query input, `k`, `efSearch`, mode HNSW / brute-force / both
+- [x] 7.2 Results table + HNSW vs brute-force comparison (intersection, recall, time)
+- [x] 7.3 GraphCanvas (Sigma.js + graphology): vertices and edges of the selected layer
+- [x] 7.4 LayerSelector: switch layers `0..maxLevel`, node/edge counters
+- [x] 7.5 Layout: PCA coordinates <-> force-directed
+- [x] 7.6 NodeInfoPanel: node level, neighbors per layer, vector
+- [x] 7.7 "Node neighborhood" mode (`around`, hop radius) and displayed-node limit
+- [x] 7.8 SearchPathOverlay: step-by-step layer descent animation (back/forward/play)
+- [x] 7.9 "Multilayer" mode (stacked layers, vertical links)
+- [x] 7.10 Legend, layer colors, entry point highlight
 
 ## Stage 8. Frontend: benchmark: Chapter 3
 
@@ -196,8 +196,14 @@ _None yet._
 - The Vite dev server runs on the fixed port `5173` and proxies `/api` to `http://localhost:8080`, so the UI does not depend on CORS; `strictPort` prevents a silent move to `5174`.
 - UI primitives are written in the repository on top of Tailwind and `lucide-react` (no component library). Design direction: graphite neutrals with a cool-green tint, mint accent for HNSW, amber for brute force, dark theme by default plus a light theme; Inter Variable for text and JetBrains Mono for numbers, both self-hosted via `@fontsource`.
 - `degreeHistogram` in `GET /index/stats` is a sparse list `[{degree, count}]` sorted by `degree`; it covers the same `(node, level)` pairs as `degreeDistribution`.
+- Sigma.js v3 and Graphology are used for WebGL graph visualization with dynamic `nodeReducer` and `edgeReducer` for 60 FPS highlighting without rebuilding the graph.
+- ForceAtlas2 layout is computed via `graphology-layout-forceatlas2` with a smooth toggle between PCA (2D) and force-directed.
+- Search mode "both" runs HNSW and brute-force queries in parallel via `Promise.all`, calculating Recall@k, set intersection, and speedup ratio.
+- Multilayer mode stacks graph layers into an isometric 2.5D projection with inter-layer links connecting identical node IDs across levels.
 
 ## Change log
+
+| 2026-11-08 | frontend | Этап 7 (7.1–7.10): `SearchPage` — форма запроса (по ID или координатам, k, efSearch, режимы HNSW / перебор / оба, трассировка); таблица результатов со сравнением Recall@k, пересечением и ускорением; `GraphCanvas` на WebGL (Sigma.js v3 + graphology); `LayerSelector` (уровни 0..maxLevel со счётчиками узлов и рёбер); переключатель укладки PCA <-> ForceAtlas2; `NodeInfoPanel` (степени, соседи, координаты, центрирование); режим окрестности (лимит 100–2000, hop radius 1–3); `SearchPathOverlay` (пошаговая анимация спуска по слоям с play/pause/step и авто-переключением слоёв); многослойный изометрический 2.5D вид; легенда и подсветка входной точки. Проверка: `npm run format:check` — ok, `npm run lint` — ok, `npm run test` — 30 тестов ok, `npm run build` — ok. |
 
 | 2026-10-31 | backend | Завершены Stage 5.6–5.10: добавлены graph snapshot и `GET /graph` с PCA/around, асинхронные `POST /benchmark` + `GET /benchmark/{id}`, versioned gob save/load для HNSW и indexmanager, тесты и обновлён `docs/API.md`. |
 
