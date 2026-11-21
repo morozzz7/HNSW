@@ -1,7 +1,7 @@
 import Graph from 'graphology'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
 import { Focus, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Sigma from 'sigma'
 import type { GraphEdge, GraphVertex } from '@/api/schemas'
 import { getLayerColor, type LayoutMode } from '../labels'
@@ -14,6 +14,7 @@ interface GraphCanvasProps {
   hoveredNodeId?: number | null
   visitedNodeIds?: Set<number>
   currentDescentNodeId?: number | null
+  tracePathIds?: number[]
   resultRanks?: Map<number, number>
   neighborhoodIds?: Set<number> | null
   layoutMode: LayoutMode
@@ -67,6 +68,7 @@ export function GraphCanvas({
   hoveredNodeId,
   visitedNodeIds,
   currentDescentNodeId,
+  tracePathIds,
   resultRanks,
   neighborhoodIds,
   layoutMode,
@@ -82,11 +84,24 @@ export function GraphCanvas({
   const graphRef = useRef<Graph | null>(null)
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false)
 
+  const tracePathEdgeKeys = useMemo(() => {
+    const pairs = new Set<string>()
+    if (!tracePathIds) return pairs
+    for (let i = 1; i < tracePathIds.length; i += 1) {
+      const a = tracePathIds[i - 1]!
+      const b = tracePathIds[i]!
+      pairs.add(`${Math.min(a, b)}:${Math.max(a, b)}`)
+    }
+    return pairs
+  }, [tracePathIds])
+
   const visualStateRef = useRef({
     selectedNodeId,
     hoveredNodeId,
     visitedNodeIds,
     currentDescentNodeId,
+    tracePathIds,
+    tracePathEdgeKeys,
     resultRanks,
     neighborhoodIds,
   })
@@ -260,6 +275,7 @@ export function GraphCanvas({
           hoveredNodeId: hovId,
           visitedNodeIds: visIds,
           currentDescentNodeId: descentId,
+          tracePathIds: pathIds,
           resultRanks: resRanks,
           neighborhoodIds: nbrIds,
         } = visualStateRef.current
@@ -267,6 +283,9 @@ export function GraphCanvas({
         const nodeId = Number(graph.getNodeAttribute(nodeKey, 'id'))
         const isCurrentDescent = descentId === nodeId
         const isVisited = visIds?.has(nodeId)
+        const pathPosition = pathIds ? pathIds.indexOf(nodeId) : -1
+        const isOnTrace = pathPosition >= 0
+        const traceActive = Boolean(pathIds && pathIds.length > 0)
         const isResult = resRanks?.has(nodeId)
         const isSelected = selId === nodeId
         const isHovered = hovId === nodeId
@@ -281,11 +300,23 @@ export function GraphCanvas({
           }
         }
 
-        if (isCurrentDescent) {
+        if (isOnTrace && isCurrentDescent) {
+          return {
+            ...data,
+            color: '#fb923c',
+            size: Math.max(12, data.size * 2.4),
+            label: `${pathPosition + 1} · #${nodeId}`,
+            highlighted: true,
+            zIndex: 110,
+          }
+        }
+
+        if (isOnTrace) {
           return {
             ...data,
             color: '#ffffff',
-            size: Math.max(10, data.size * 2),
+            size: Math.max(9, data.size * 2),
+            label: `${pathPosition + 1} · #${nodeId}`,
             highlighted: true,
             zIndex: 100,
           }
@@ -301,16 +332,6 @@ export function GraphCanvas({
           }
         }
 
-        if (isVisited) {
-          return {
-            ...data,
-            color: '#5be0b5',
-            size: Math.max(7, data.size * 1.4),
-            highlighted: true,
-            zIndex: 50,
-          }
-        }
-
         if (isResult) {
           return {
             ...data,
@@ -318,6 +339,26 @@ export function GraphCanvas({
             size: Math.max(6.5, data.size * 1.3),
             highlighted: true,
             zIndex: 40,
+          }
+        }
+
+        if (traceActive) {
+          return {
+            ...data,
+            color: 'rgba(110, 130, 120, 0.18)',
+            size: Math.max(2, data.size * 0.75),
+            label: '',
+            zIndex: 0,
+          }
+        }
+
+        if (isVisited) {
+          return {
+            ...data,
+            color: '#5be0b5',
+            size: Math.max(7, data.size * 1.4),
+            highlighted: true,
+            zIndex: 50,
           }
         }
 
@@ -345,6 +386,8 @@ export function GraphCanvas({
           selectedNodeId: selId,
           visitedNodeIds: visIds,
           currentDescentNodeId: descentId,
+          tracePathIds: pathIds,
+          tracePathEdgeKeys: pathEdgeKeys,
           resultRanks: resRanks,
           neighborhoodIds: nbrIds,
         } = visualStateRef.current
@@ -352,6 +395,24 @@ export function GraphCanvas({
         const [u, v] = graph.extremities(edgeKey)
         const uId = Number(graph.getNodeAttribute(u, 'id'))
         const vId = Number(graph.getNodeAttribute(v, 'id'))
+
+        if (pathEdgeKeys.has(`${Math.min(uId, vId)}:${Math.max(uId, vId)}`)) {
+          return {
+            ...data,
+            color: '#ffffff',
+            size: 3,
+            zIndex: 60,
+          }
+        }
+
+        if (pathIds && pathIds.length > 0) {
+          return {
+            ...data,
+            color: 'rgba(120, 140, 130, 0.06)',
+            size: 0.5,
+            zIndex: 0,
+          }
+        }
 
         const uHighlight =
           uId === selId || visIds?.has(uId) || resRanks?.has(uId) || uId === descentId
@@ -413,6 +474,8 @@ export function GraphCanvas({
       hoveredNodeId,
       visitedNodeIds,
       currentDescentNodeId,
+      tracePathIds,
+      tracePathEdgeKeys,
       resultRanks,
       neighborhoodIds,
     }
@@ -424,6 +487,8 @@ export function GraphCanvas({
     hoveredNodeId,
     visitedNodeIds,
     currentDescentNodeId,
+    tracePathIds,
+    tracePathEdgeKeys,
     resultRanks,
     neighborhoodIds,
   ])

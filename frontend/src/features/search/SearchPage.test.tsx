@@ -79,6 +79,30 @@ describe('SearchPage', () => {
     expect(screen.getByText('Дистанция BF')).toBeInTheDocument()
   })
 
+  it('loads trace vertices that fall outside the displayed graph limit', async () => {
+    setMockBuildDuration(0)
+    await api.buildIndex({
+      datasetId: 'ds_000001',
+      M: 8,
+      efConstruction: 50,
+      metric: 'l2',
+      heuristic: true,
+      seed: 1,
+    })
+    const graphSpy = vi.spyOn(api, 'graph')
+
+    const user = userEvent.setup()
+    renderWithProviders(<SearchPage />)
+    await user.click(await screen.findByRole('button', { name: /Выполнить поиск/ }))
+
+    await waitFor(() => {
+      expect(graphSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 1, around: '666' }),
+        expect.anything(),
+      )
+    })
+  })
+
   it('shows a server error instead of silently dropping a failed search', async () => {
     setMockBuildDuration(0)
     await api.buildIndex({

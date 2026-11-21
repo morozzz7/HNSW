@@ -39,6 +39,20 @@ interface LayerGraphData {
   error: boolean
 }
 
+function combineGraphVertices(results: UseQueryResult<GraphResponse, Error>[]): GraphVertex[] {
+  const out: GraphVertex[] = []
+  const seen = new Set<number>()
+  for (const result of results) {
+    for (const vertex of result.data?.vertices ?? []) {
+      if (!seen.has(vertex.id)) {
+        seen.add(vertex.id)
+        out.push(vertex)
+      }
+    }
+  }
+  return out
+}
+
 function combineLayerGraphs(results: UseQueryResult<GraphResponse, Error>[]): LayerGraphData {
   const vertices = new Map<number, GraphVertex[]>()
   const edges: GraphEdge[] = []
@@ -123,6 +137,31 @@ export function SearchPage() {
     [isMultilayer, allLayerEdges, graphQuery.data?.edges],
   )
 
+  const tracePathIds =
+    activeTraceStep?.level === activeLevel ? activeTraceStep.visitedOnLevel : undefined
+  const traceIdsOnLevel = useMemo(
+    () =>
+      searchOutcome?.hnsw?.trace?.layers.find((layer) => layer.level === activeLevel)?.visited ??
+      [],
+    [searchOutcome, activeLevel],
+  )
+  const traceVertices = useQueries({
+    queries: traceIdsOnLevel.map((id) => ({
+      queryKey: queryKeys.graph(activeLevel, 1, String(id)),
+      queryFn: ({ signal }: { signal?: AbortSignal }) =>
+        api.graph({ level: activeLevel, limit: 1, around: String(id) }, signal),
+      enabled: isIndexReady && !isMultilayer,
+      staleTime: 60_000,
+    })),
+    combine: combineGraphVertices,
+  })
+  const displayedVertices = useMemo(() => {
+    if (traceVertices.length === 0) return vertices
+    const present = new Set(vertices.map((v) => v.id))
+    const extra = traceVertices.filter((v) => !present.has(v.id))
+    return extra.length === 0 ? vertices : [...vertices, ...extra]
+  }, [vertices, traceVertices])
+
   // Map of neighbors on current layer for selected node
   const inLayerNeighbors = useMemo(() => {
     if (selectedNodeId === null) return []
@@ -170,8 +209,8 @@ export function SearchPage() {
       }
       return null
     }
-    return vertices.find((v) => v.id === selectedNodeId) ?? null
-  }, [selectedNodeId, vertices, isMultilayer, allLayerVertices])
+    return displayedVertices.find((v) => v.id === selectedNodeId) ?? null
+  }, [selectedNodeId, displayedVertices, isMultilayer, allLayerVertices])
 
   // Results rank map
   const resultRanks = useMemo(() => {
@@ -371,13 +410,14 @@ export function SearchPage() {
               </div>
             ) : (
               <GraphCanvas
-                vertices={vertices}
+                vertices={isMultilayer ? vertices : displayedVertices}
                 edges={edges}
                 activeLevel={activeLevel}
                 selectedNodeId={selectedNodeId}
                 hoveredNodeId={hoveredNodeId}
                 visitedNodeIds={visitedNodeIds}
                 currentDescentNodeId={activeTraceStep?.nodeId}
+                tracePathIds={tracePathIds}
                 resultRanks={resultRanks}
                 neighborhoodIds={neighborhoodIds}
                 layoutMode={layoutMode}

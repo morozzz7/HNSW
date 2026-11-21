@@ -209,6 +209,7 @@ _None yet._
 - Multilayer graph data is combined by `useQueries({ combine })` with a module-level function so query results are structurally shared; `GraphCanvas` keeps handlers in a ref and rebuilds Sigma only when graph data or layout changes. Labels are disabled above 800 nodes and ForceAtlas2 uses 30 iterations above 1500 nodes.
 - `docker-compose.yml` runs the Go backend and Vite frontend from official images (no Dockerfiles); Vite takes the proxy target from `VITE_API_PROXY_TARGET` so Compose can point it at `http://backend:8080`.
 - README embeds four real UI screenshots from `docs/screenshots/` captured with Playwright in mocks mode; no E2E framework is committed to the repository.
+- Trace visualization loads visited vertices outside the displayed layer limit via `GET /graph?level=L&limit=1&around=<id>`, then renders the ordered path in white (current node in orange) and dims the rest of the graph.
 
 ## Change log
 
