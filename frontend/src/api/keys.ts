@@ -6,4 +6,5 @@ export const queryKeys = {
   indexStats: ['index', 'stats'] as const,
   graph: (level: number, limit: number, around?: string) =>
     ['graph', level, limit, around ?? ''] as const,
+  benchmarkJob: (id: string) => ['benchmark', id] as const,
 }

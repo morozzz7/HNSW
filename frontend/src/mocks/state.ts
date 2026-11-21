@@ -1,4 +1,7 @@
 import type {
+  BenchmarkInput,
+  BenchmarkResult,
+  BenchmarkStatusName,
   DegreeBucket,
   GenerateInput,
   GraphEdge,
@@ -53,12 +56,27 @@ export interface MockIndexStats {
 }
 
 export const DEFAULT_BUILD_MS = 4_000
+export const DEFAULT_BENCHMARK_MS = 2_500
+
+export interface MockBenchmarkJob {
+  id: string
+  indexId: string
+  status: BenchmarkStatusName
+  progress: number
+  startedAt: number
+  durationMs: number
+  results: BenchmarkResult[]
+  error: string | null
+}
 
 let datasets: MockDataset[] = []
 let index: MockIndex | null = null
 let datasetCounter = 0
 let indexCounter = 0
 let buildMs = DEFAULT_BUILD_MS
+let benchmarks = new Map<string, MockBenchmarkJob>()
+let benchmarkCounter = 0
+let benchmarkMs = DEFAULT_BENCHMARK_MS
 
 function round(value: number): number {
   return Math.round(value * 1000) / 1000
@@ -132,6 +150,9 @@ export function seedMockState() {
   datasetCounter = 0
   indexCounter = 0
   buildMs = DEFAULT_BUILD_MS
+  benchmarks = new Map()
+  benchmarkCounter = 0
+  benchmarkMs = DEFAULT_BENCHMARK_MS
 
   const uniform = createDataset({
     n: 2_000,
@@ -156,6 +177,10 @@ export function resetMockState() {
 
 export function setMockBuildDuration(ms: number) {
   buildMs = ms
+}
+
+export function setMockBenchmarkDuration(ms: number) {
+  benchmarkMs = ms
 }
 
 export function listDatasets() {
@@ -442,6 +467,112 @@ export function mockSearch(input: SearchInput): SearchResponse | null {
     found: results.length,
     trace,
   }
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits
+  return Math.round(value * factor) / factor
+}
+
+function buildBenchmarkResults(
+  input: BenchmarkInput,
+  dataset: MockDataset,
+  config: MockIndex['config'],
+): BenchmarkResult[] {
+  const n = Math.max(1, dataset.n)
+  const dim = Math.max(1, dataset.dim)
+  const bruteforceQps = 1200 * (5000 / Math.max(1000, n)) * (16 / dim)
+  const results: BenchmarkResult[] = []
+
+  for (const M of input.M) {
+    for (const efConstruction of input.efConstruction) {
+      for (const efSearch of input.efSearch) {
+        const recall = Math.min(
+          0.999,
+          0.62 +
+            0.33 * (1 - Math.exp(-efSearch / 25)) +
+            Math.min(0.04, Math.max(0, M - 8) * 0.001) +
+            Math.min(0.03, efConstruction / 10_000),
+        )
+        const qps = (60_000 / (1 + efSearch / 12) / (1 + M / 40)) * (5000 / Math.max(1000, n))
+        const p50 = (1000 / qps) * 0.7
+        const buildTimeMs = n * efConstruction * (0.0004 + M * 0.000012)
+
+        results.push({
+          M,
+          efConstruction,
+          efSearch,
+          metric: config.metric,
+          heuristic: config.heuristic,
+          k: input.k,
+          recall: roundTo(recall, 4),
+          qps: roundTo(qps, 2),
+          latencyP50Ms: roundTo(p50, 3),
+          latencyP95Ms: roundTo(p50 * 2.4, 3),
+          latencyP99Ms: roundTo(p50 * 4, 3),
+          buildTimeMs: roundTo(buildTimeMs, 2),
+          bruteforceQps: roundTo(bruteforceQps, 2),
+          speedup: roundTo(qps / bruteforceQps, 2),
+        })
+      }
+    }
+  }
+
+  return results
+}
+
+export function startMockBenchmark(input: BenchmarkInput): MockBenchmarkJob | null {
+  const active = refreshIndex()
+  if (!active || active.status !== 'ready' || !active.stats) {
+    return null
+  }
+  const dataset = findDataset(active.datasetId)
+  if (!dataset) {
+    return null
+  }
+
+  benchmarkCounter += 1
+  const job: MockBenchmarkJob = {
+    id: `bench_${String(benchmarkCounter).padStart(4, '0')}`,
+    indexId: active.indexId,
+    status: 'queued',
+    progress: 0,
+    startedAt: Date.now(),
+    durationMs: benchmarkMs,
+    results: buildBenchmarkResults(input, dataset, active.config),
+    error: null,
+  }
+  benchmarks.set(job.id, job)
+  return job
+}
+
+export function refreshBenchmarkJob(id: string): MockBenchmarkJob | null {
+  const job = benchmarks.get(id)
+  if (!job) {
+    return null
+  }
+  if (job.status === 'done' || job.status === 'error') {
+    return job
+  }
+
+  const elapsed = Date.now() - job.startedAt
+  const progress = job.durationMs <= 0 ? 1 : Math.min(1, elapsed / job.durationMs)
+  job.progress = progress
+  if (progress >= 1) {
+    job.status = 'done'
+  } else if (elapsed >= 150) {
+    job.status = 'running'
+  }
+  return job
+}
+
+export function failMockBenchmark(id: string, message: string) {
+  const job = benchmarks.get(id)
+  if (!job) {
+    return
+  }
+  job.status = 'error'
+  job.error = message
 }
 
 resetMockState()

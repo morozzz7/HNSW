@@ -1,6 +1,8 @@
 import { request, uploadFile } from './client'
 import type { UploadOptions } from './client'
 import {
+  benchmarkJobSchema,
+  benchmarkRunResponseSchema,
   buildIndexResponseSchema,
   createdDatasetSchema,
   datasetListSchema,
@@ -12,6 +14,9 @@ import {
   searchResponseSchema,
 } from './schemas'
 import type {
+  BenchmarkInput,
+  BenchmarkJob,
+  BenchmarkRunResponse,
   BuildIndexInput,
   GenerateInput,
   GraphResponse,
@@ -85,5 +90,17 @@ export const api = {
     const query = searchParams.toString()
     const path = query.length > 0 ? `/graph?${query}` : '/graph'
     return request(path, graphResponseSchema, { signal })
+  },
+
+  runBenchmark(input: BenchmarkInput, signal?: AbortSignal): Promise<BenchmarkRunResponse> {
+    return request('/benchmark', benchmarkRunResponseSchema, {
+      method: 'POST',
+      body: input,
+      signal,
+    })
+  },
+
+  benchmarkJob(id: string, signal?: AbortSignal): Promise<BenchmarkJob> {
+    return request(`/benchmark/${encodeURIComponent(id)}`, benchmarkJobSchema, { signal })
   },
 }

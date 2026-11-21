@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { api } from '@/api/endpoints'
-import { setMockBuildDuration } from '@/mocks/state'
+import { setMockBenchmarkDuration, setMockBuildDuration } from '@/mocks/state'
 import type { IndexStatus } from '@/api/schemas'
 
 async function waitForReady(timeoutMs = 2_000): Promise<IndexStatus> {
@@ -140,5 +140,40 @@ describe('mock backend', () => {
     expect(graphRes.vertices.length).toBeGreaterThan(0)
     expect(graphRes.vertices[0]).toHaveProperty('x')
     expect(graphRes.vertices[0]).toHaveProperty('y')
+  })
+
+  it('runs a benchmark job and normalizes recall@k', async () => {
+    setMockBuildDuration(0)
+    setMockBenchmarkDuration(0)
+    const created = await api.generateDataset({
+      n: 120,
+      dim: 6,
+      distribution: 'uniform',
+      seed: 2,
+    })
+    await api.buildIndex({
+      datasetId: created.id,
+      M: 8,
+      efConstruction: 100,
+      metric: 'l2',
+      heuristic: true,
+      seed: 1,
+    })
+    await waitForReady()
+
+    const started = await api.runBenchmark({
+      M: [8, 16],
+      efConstruction: [100],
+      efSearch: [10, 50],
+      k: 5,
+      queries: 20,
+    })
+    expect(started.status).toBe('queued')
+
+    const job = await api.benchmarkJob(started.id)
+    expect(job.status).toBe('done')
+    expect(job.results).toHaveLength(4)
+    expect(job.results?.[0]?.recall).toBeGreaterThan(0)
+    expect(job.results?.[0]?.k).toBe(5)
   })
 })

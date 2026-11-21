@@ -20,6 +20,10 @@
   --warn-soft: rgba(224, 177, 91, 0.22);
   --danger: #a8342a;
   --danger-soft: rgba(224, 101, 91, 0.16);
+  --chart-3: #4b6fa8;
+  --chart-4: #a8553f;
+  --chart-5: #7a5aa8;
+  --chart-6: #2f7d86;
 }
 
 .dark {
@@ -40,6 +44,10 @@
   --warn-soft: rgba(224, 177, 91, 0.14);
   --danger: #e0655b;
   --danger-soft: rgba(224, 101, 91, 0.14);
+  --chart-3: #7fa6e0;
+  --chart-4: #e08a72;
+  --chart-5: #b79ae0;
+  --chart-6: #6fc2cc;
 }
 
 @theme inline {

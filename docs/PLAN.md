@@ -12,7 +12,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (repository setup), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 6 (frontend skeleton, datasets, index build & stats) is complete. Stage 7 (frontend search, comparison, and graph visualization: 7.1–7.10) is complete.
+**Current status:** Stage 0 (repository setup), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 6 (frontend skeleton, datasets, index build & stats) is complete. Stage 7 (frontend search, comparison, and graph visualization: 7.1–7.10) is complete. Stage 8 (frontend benchmark: 8.1–8.7) is complete.
 
 ---
 
@@ -133,13 +133,13 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 ## Stage 8. Frontend: benchmark: Chapter 3
 
-- [ ] 8.1 BenchmarkPage: parameter grid form, run, progress indicator
-- [ ] 8.2 Chart recall@k vs efSearch
-- [ ] 8.3 Chart QPS vs recall (Pareto curve)
-- [ ] 8.4 Chart latency p50/p95/p99
-- [ ] 8.5 Chart build time vs `M` / `efConstruction`
-- [ ] 8.6 Comparison with brute force (speedup xN)
-- [ ] 8.7 Results table + CSV and PNG export
+- [x] 8.1 BenchmarkPage: parameter grid form, run, progress indicator
+- [x] 8.2 Chart recall@k vs efSearch
+- [x] 8.3 Chart QPS vs recall (Pareto curve)
+- [x] 8.4 Chart latency p50/p95/p99
+- [x] 8.5 Chart build time vs `M` / `efConstruction`
+- [x] 8.6 Comparison with brute force (speedup xN)
+- [x] 8.7 Results table + CSV and PNG export
 
 ## Stage 9. Integration and polish
 
@@ -200,8 +200,14 @@ _None yet._
 - ForceAtlas2 layout is computed via `graphology-layout-forceatlas2` with a smooth toggle between PCA (2D) and force-directed.
 - Search mode "both" runs HNSW and brute-force queries in parallel via `Promise.all`, calculating Recall@k, set intersection, and speedup ratio.
 - Multilayer mode stacks graph layers into an isometric 2.5D projection with inter-layer links connecting identical node IDs across levels.
+- Benchmark charts (recall, Pareto, latency, build time) are hand-written SVG components in `src/components/charts/` with colors from CSS tokens; no chart library or component library was added.
+- Benchmark jobs have no SSE endpoint: `GET /benchmark/{id}` is polled every 800 ms while the job is `queued`/`running`. Grid series are pairs `(M, efConstruction)` because metric and heuristic are fixed by the current index; build time is deduplicated by that pair.
+- PNG export serializes the chart SVG with computed styles inlined, renders it to a 2× canvas and downloads it; CSV export uses a stable `recall` column independent of `k`, matching the backend CSV contract.
+- MSW generates deterministic benchmark results (`setMockBenchmarkDuration` controls progress) and emits the dynamic `recall@<k>` field so the client schema is exercised without a backend.
 
 ## Change log
+
+| 2026-11-21 | frontend | Этап 8 (8.1–8.7): `BenchmarkPage` — форма сетки `M × efConstruction × efSearch` (пресеты, дедупликация списков, лимит 256 комбинаций, k и queries), запуск и поллинг `GET /benchmark/{id}` каждые 800 мс с прогрессом; карточки сравнения с перебором (QPS BF, лучший recall, QPS при целевом recall, максимальное ускорение); четыре SVG-графика (recall@k vs efSearch, QPS vs recall с Парето-фронтом, p50/p95/p99, время построения по M и efC) с переключаемыми сериями и экспортом PNG; сортируемая таблица 24+ строк с экспортом CSV. API-слой: zod-схемы (нормализация `recall@<k>`), `runBenchmark`/`benchmarkJob`, хук `useBenchmarkJob`. MSW-мок бенчмарка с детерминированными результатами и прогрессом. Проверка: `npm run format:check` — ok, `npm run lint` — ok, `npm run test` — 43 теста ok, `npm run build` — ok; ручной прогон в Chromium (`dev:mocks`): 4 графика, 24 строки, CSV и PNG скачиваются, ошибок в консоли нет. |
 
 | 2026-11-08 | frontend | Этап 7 (7.1–7.10): `SearchPage` — форма запроса (по ID или координатам, k, efSearch, режимы HNSW / перебор / оба, трассировка); таблица результатов со сравнением Recall@k, пересечением и ускорением; `GraphCanvas` на WebGL (Sigma.js v3 + graphology); `LayerSelector` (уровни 0..maxLevel со счётчиками узлов и рёбер); переключатель укладки PCA <-> ForceAtlas2; `NodeInfoPanel` (степени, соседи, координаты, центрирование); режим окрестности (лимит 100–2000, hop radius 1–3); `SearchPathOverlay` (пошаговая анимация спуска по слоям с play/pause/step и авто-переключением слоёв); многослойный изометрический 2.5D вид; легенда и подсветка входной точки. Проверка: `npm run format:check` — ok, `npm run lint` — ok, `npm run test` — 30 тестов ok, `npm run build` — ok. |
 

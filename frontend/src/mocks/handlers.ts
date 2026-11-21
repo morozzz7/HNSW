@@ -5,11 +5,13 @@ import {
   MAX_UPLOAD_BYTES,
   MAX_VALUES,
   MAX_VECTORS,
+  benchmarkInputSchema,
   buildIndexInputSchema,
   generateInputSchema,
   searchInputSchema,
 } from '@/api/schemas'
 import type {
+  BenchmarkResult,
   BuildIndexInput,
   IndexDoneEvent,
   IndexErrorEvent,
@@ -25,6 +27,8 @@ import {
   mockIndexStats,
   mockIndexStatus,
   mockSearch,
+  refreshBenchmarkJob,
+  startMockBenchmark,
   startMockBuild,
 } from './state'
 
@@ -39,6 +43,11 @@ function validationMessage(result: {
   error?: { issues: { message: string }[] }
 }) {
   return result.error?.issues[0]?.message ?? 'Некорректные параметры'
+}
+
+function toBenchmarkWire(row: BenchmarkResult) {
+  const { recall, ...rest } = row
+  return { ...rest, [`recall@${row.k}`]: recall }
 }
 
 function parseUpload(text: string, name: string): number[][] {
@@ -265,6 +274,45 @@ export const handlers = [
       return fail(400, 'INVALID_REQUEST', 'Не удалось получить граф для уровня')
     }
     return HttpResponse.json(graphRes)
+  }),
+
+  http.post(`${base}/benchmark`, async ({ request }) => {
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return fail(400, 'INVALID_REQUEST', 'Тело запроса должно быть JSON')
+    }
+    const parsed = benchmarkInputSchema.safeParse(raw)
+    if (!parsed.success) {
+      return fail(400, 'INVALID_REQUEST', validationMessage(parsed))
+    }
+    const status = mockIndexStatus()
+    if (status.status === 'building') {
+      return fail(409, 'INDEX_NOT_READY', 'Индекс ещё строится')
+    }
+    if (status.status !== 'ready') {
+      return fail(404, 'INDEX_NOT_FOUND', 'Индекс ещё не построен')
+    }
+    const job = startMockBenchmark(parsed.data)
+    if (!job) {
+      return fail(500, 'INTERNAL_ERROR', 'Не удалось запустить бенчмарк')
+    }
+    return HttpResponse.json({ id: job.id, status: 'queued' }, { status: 202 })
+  }),
+
+  http.get(`${base}/benchmark/:id`, ({ params }) => {
+    const job = refreshBenchmarkJob(String(params.id))
+    if (!job) {
+      return fail(404, 'NOT_FOUND', `Задача "${String(params.id)}" не найдена`)
+    }
+    return HttpResponse.json({
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      ...(job.status === 'error' ? { error: job.error ?? 'Ошибка бенчмарка' } : {}),
+      ...(job.status === 'done' ? { results: job.results.map(toBenchmarkWire) } : {}),
+    })
   }),
 
   sse<{ progress: IndexProgressEvent; done: IndexDoneEvent; error: IndexErrorEvent }>(

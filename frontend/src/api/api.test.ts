@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { request } from './client'
 import { ApiError, errorMessage, shouldRetry } from './errors'
 import {
+  benchmarkInputSchema,
+  benchmarkResultSchema,
   buildIndexInputSchema,
   datasetListSchema,
   generateInputSchema,
@@ -83,6 +85,45 @@ describe('schemas', () => {
       seed: 1,
     })
     expect(result.success).toBe(false)
+  })
+
+  it('validates benchmark grid size and limits', () => {
+    const base = {
+      M: [16],
+      efConstruction: [100],
+      efSearch: [10, 50],
+      k: 10,
+      queries: 100,
+    }
+    expect(benchmarkInputSchema.safeParse(base).success).toBe(true)
+    expect(
+      benchmarkInputSchema.safeParse({
+        ...base,
+        efSearch: Array.from({ length: 257 }, (_, index) => index + 1),
+      }).success,
+    ).toBe(false)
+    expect(benchmarkInputSchema.safeParse({ ...base, M: [1] }).success).toBe(false)
+    expect(benchmarkInputSchema.safeParse({ ...base, queries: 1 }).success).toBe(false)
+  })
+
+  it('normalizes the dynamic recall@k field from benchmark rows', () => {
+    const parsed = benchmarkResultSchema.parse({
+      M: 16,
+      efConstruction: 200,
+      efSearch: 100,
+      metric: 'l2',
+      heuristic: true,
+      k: 10,
+      'recall@10': 0.968,
+      qps: 3420.5,
+      latencyP50Ms: 0.12,
+      latencyP95Ms: 0.31,
+      latencyP99Ms: 0.58,
+      buildTimeMs: 412,
+      bruteforceQps: 12.4,
+      speedup: 275.8,
+    })
+    expect(parsed.recall).toBe(0.968)
   })
 
   it('parses index stats with a histogram', () => {

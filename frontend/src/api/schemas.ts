@@ -13,6 +13,9 @@ export const MIN_EF_SEARCH = 0
 export const MAX_EF_SEARCH = 10_000
 export const MIN_GRAPH_LIMIT = 1
 export const MAX_GRAPH_LIMIT = 5000
+export const MAX_BENCHMARK_GRID = 256
+export const MIN_BENCHMARK_QUERIES = 10
+export const MAX_BENCHMARK_QUERIES = 10_000
 
 export const metricSchema = z.enum(['l2', 'cosine', 'inner_product'])
 export const distributionSchema = z.enum(['uniform', 'gaussian', 'clusters'])
@@ -241,6 +244,100 @@ export const graphResponseSchema = z.object({
   edges: z.array(graphEdgeSchema),
 })
 
+const benchmarkGridList = (min: number, max: number, message: string) =>
+  z
+    .array(z.number().int().min(min, { message }).max(max, { message }))
+    .min(1, { message: 'Добавьте хотя бы одно значение' })
+
+export const benchmarkInputSchema = z
+  .object({
+    M: benchmarkGridList(MIN_M, MAX_M, `M от ${MIN_M} до ${MAX_M}`),
+    efConstruction: benchmarkGridList(
+      1,
+      MAX_EF_CONSTRUCTION,
+      `efConstruction от 1 до ${MAX_EF_CONSTRUCTION}`,
+    ),
+    efSearch: benchmarkGridList(1, MAX_EF_SEARCH, `efSearch от 1 до ${MAX_EF_SEARCH}`),
+    k: z
+      .number()
+      .int({ message: 'k должно быть целым' })
+      .min(MIN_K, { message: `k от ${MIN_K} до ${MAX_K}` })
+      .max(MAX_K, { message: `k от ${MIN_K} до ${MAX_K}` }),
+    queries: z
+      .number()
+      .int({ message: 'queries должно быть целым' })
+      .min(MIN_BENCHMARK_QUERIES, {
+        message: `queries от ${MIN_BENCHMARK_QUERIES} до ${MAX_BENCHMARK_QUERIES}`,
+      })
+      .max(MAX_BENCHMARK_QUERIES, {
+        message: `queries от ${MIN_BENCHMARK_QUERIES} до ${MAX_BENCHMARK_QUERIES}`,
+      }),
+    indexId: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const combinations = value.M.length * value.efConstruction.length * value.efSearch.length
+    if (combinations > MAX_BENCHMARK_GRID) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Сетка больше ${MAX_BENCHMARK_GRID} комбинаций`,
+        path: ['efSearch'],
+      })
+    }
+  })
+
+export const benchmarkStatusNameSchema = z.enum(['queued', 'running', 'done', 'error'])
+
+const benchmarkResultWireSchema = z
+  .object({
+    M: z.number().int(),
+    efConstruction: z.number().int(),
+    efSearch: z.number().int(),
+    metric: metricSchema,
+    heuristic: z.boolean(),
+    k: z.number().int(),
+    qps: z.number(),
+    latencyP50Ms: z.number(),
+    latencyP95Ms: z.number(),
+    latencyP99Ms: z.number(),
+    buildTimeMs: z.number(),
+    bruteforceQps: z.number(),
+    speedup: z.number(),
+  })
+  .loose()
+
+export const benchmarkResultSchema = benchmarkResultWireSchema.transform((wire) => {
+  const rawRecall = wire[`recall@${wire.k}`] ?? wire.recall
+  return {
+    M: wire.M,
+    efConstruction: wire.efConstruction,
+    efSearch: wire.efSearch,
+    metric: wire.metric,
+    heuristic: wire.heuristic,
+    k: wire.k,
+    recall: typeof rawRecall === 'number' ? rawRecall : 0,
+    qps: wire.qps,
+    latencyP50Ms: wire.latencyP50Ms,
+    latencyP95Ms: wire.latencyP95Ms,
+    latencyP99Ms: wire.latencyP99Ms,
+    buildTimeMs: wire.buildTimeMs,
+    bruteforceQps: wire.bruteforceQps,
+    speedup: wire.speedup,
+  }
+})
+
+export const benchmarkJobSchema = z.object({
+  id: z.string(),
+  status: benchmarkStatusNameSchema,
+  progress: z.number().min(0).max(1),
+  results: z.array(benchmarkResultSchema).optional(),
+  error: z.string().optional(),
+})
+
+export const benchmarkRunResponseSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+})
+
 export type SearchMode = z.infer<typeof searchModeSchema>
 export type UISearchMode = z.infer<typeof uiSearchModeSchema>
 export type SearchInput = z.infer<typeof searchInputSchema>
@@ -251,6 +348,11 @@ export type SearchResponse = z.infer<typeof searchResponseSchema>
 export type GraphVertex = z.infer<typeof graphVertexSchema>
 export type GraphEdge = z.infer<typeof graphEdgeSchema>
 export type GraphResponse = z.infer<typeof graphResponseSchema>
+export type BenchmarkInput = z.infer<typeof benchmarkInputSchema>
+export type BenchmarkResult = z.infer<typeof benchmarkResultSchema>
+export type BenchmarkJob = z.infer<typeof benchmarkJobSchema>
+export type BenchmarkRunResponse = z.infer<typeof benchmarkRunResponseSchema>
+export type BenchmarkStatusName = z.infer<typeof benchmarkStatusNameSchema>
 
 export type DatasetListItem = z.infer<typeof datasetListItemSchema>
 export type Dataset = z.infer<typeof datasetSchema>
