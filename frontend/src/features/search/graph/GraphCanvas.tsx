@@ -244,12 +244,30 @@ export function GraphCanvas({
         }
       }
 
+      if (layoutMode === 'force') {
+        const state = visualStateRef.current
+        const keepIds = new Set<number>([
+          ...(state.selectedNodeId !== null ? [state.selectedNodeId] : []),
+          ...(state.currentDescentNodeId !== null && state.currentDescentNodeId !== undefined
+            ? [state.currentDescentNodeId]
+            : []),
+          ...(state.visitedNodeIds ? Array.from(state.visitedNodeIds) : []),
+          ...(state.resultRanks ? Array.from(state.resultRanks.keys()) : []),
+        ])
+        for (const key of graph.nodes()) {
+          if (graph.degree(key) === 0 && !keepIds.has(Number(graph.getNodeAttribute(key, 'id')))) {
+            graph.dropNode(key)
+          }
+        }
+      }
+
       if (layoutMode === 'force' && graph.order > 1) {
         forceAtlas2.assign(graph, {
           iterations: graph.order > 1500 ? 30 : 60,
           settings: {
-            gravity: 1.2,
-            scalingRatio: 2.5,
+            gravity: 8,
+            scalingRatio: 1.5,
+            strongGravityMode: true,
             barnesHutOptimize: true,
           },
         })
