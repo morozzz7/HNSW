@@ -313,87 +313,89 @@ export function GraphCanvas({
         const isSelected = selId === nodeId
         const isHovered = hovId === nodeId
         const inNeighborhood = nbrIds ? nbrIds.has(nodeId) : true
+        const styled = (value: typeof data) => ({
+          ...value,
+          labelColor: isHovered ? '#111827' : labelColor,
+        })
 
         if (!inNeighborhood && !isCurrentDescent && !isVisited && !isResult && !isSelected) {
-          return {
+          return styled({
             ...data,
             color: 'rgba(120, 140, 130, 0.12)',
             label: '',
             zIndex: 0,
-          }
+          })
         }
 
         if (isOnTrace && isCurrentDescent) {
-          return {
+          return styled({
             ...data,
             color: '#fb923c',
             size: Math.max(12, data.size * 2.4),
             label: `${pathPosition + 1} · #${nodeId}`,
             labelVisibility: 'visible',
             labelSize: 16,
-            labelWeight: 'bold',
             highlighted: true,
             zIndex: 110,
-          }
+          })
         }
 
         if (isOnTrace) {
-          return {
+          return styled({
             ...data,
             color: '#ffffff',
             size: Math.max(9, data.size * 2),
             label: `${pathPosition + 1} · #${nodeId}`,
             labelVisibility: 'visible',
             labelSize: 16,
-            labelWeight: 'bold',
             highlighted: true,
             zIndex: 100,
-          }
+          })
         }
 
         if (isSelected) {
-          return {
+          return styled({
             ...data,
             color: '#5be0b5',
             size: Math.max(9, data.size * 1.8),
             highlighted: true,
             zIndex: 90,
-          }
+          })
         }
 
         if (isResult) {
-          return {
+          return styled({
             ...data,
             color: '#38bdf8',
             size: Math.max(6.5, data.size * 1.3),
             highlighted: true,
             zIndex: 40,
-          }
+          })
         }
 
         if (traceActive) {
-          return { ...data, label: '', zIndex: 0 }
+          return styled({ ...data, label: '', zIndex: 0 })
         }
 
         if (isVisited) {
-          return {
+          return styled({
             ...data,
             color: '#5be0b5',
             size: Math.max(7, data.size * 1.4),
             highlighted: true,
             zIndex: 50,
-          }
+          })
         }
 
         if (isHovered) {
-          return {
+          return styled({
             ...data,
             size: data.size * 1.4,
             zIndex: 60,
-          }
+          })
         }
 
-        return data
+        return styled(data)
       },
       edgeReducer: (edgeKey, data) => {
         const isInterLayer = Boolean(graph.getEdgeAttribute(edgeKey, 'isInterLayer'))
