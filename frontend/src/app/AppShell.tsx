@@ -90,7 +90,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           )}
           {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
         </button>
-        <p className="px-2.5 pt-1 font-mono text-[11px] text-ink-3">v0.1 · этап 6</p>
+        <p className="px-2.5 pt-1 font-mono text-[11px] text-ink-3">v0.1 · этап 9</p>
       </div>
     </div>
   )

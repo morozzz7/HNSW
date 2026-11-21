@@ -36,6 +36,33 @@ describe('DatasetPage', () => {
     expect(screen.getByText('n × dim = 960 компонентов, использовано 0%.')).toBeInTheDocument()
   })
 
+  it('rejects generation with n = 0 before uploading', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<DatasetPage />)
+
+    await screen.findByText('ds_000001')
+
+    const vectors = screen.getByLabelText('Векторов, n')
+    await user.clear(vectors)
+    await user.type(vectors, '0')
+    await user.click(screen.getByRole('button', { name: /Сгенерировать/ }))
+
+    expect(await screen.findByText('n должно быть не меньше 1')).toBeInTheDocument()
+  })
+
+  it('rejects an empty file before uploading', async () => {
+    renderWithProviders(<DatasetPage />)
+
+    await screen.findByText('ds_000001')
+
+    const input = document.querySelector('input[type="file"]')
+    expect(input).not.toBeNull()
+    const file = new File([], 'empty.csv', { type: 'text/csv' })
+    fireEvent.change(input as HTMLInputElement, { target: { files: [file] } })
+
+    expect(await screen.findByText('Файл пустой')).toBeInTheDocument()
+  })
+
   it('rejects a file with an unsupported extension before uploading', async () => {
     renderWithProviders(<DatasetPage />)
 

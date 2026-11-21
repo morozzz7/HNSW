@@ -42,6 +42,17 @@ describe('IndexPage', () => {
     })
   })
 
+  it('disables the build button while the index is building', async () => {
+    setMockBuildDuration(10_000)
+    const user = userEvent.setup()
+    renderWithProviders(<IndexPage />)
+
+    await screen.findByLabelText('Датасет')
+    await user.click(screen.getByRole('button', { name: /Построить индекс/ }))
+
+    expect(await screen.findByRole('button', { name: /Идёт сборка/ })).toBeDisabled()
+  })
+
   it('renders graph statistics once the index is ready', async () => {
     setMockBuildDuration(0)
     const user = userEvent.setup()

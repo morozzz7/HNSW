@@ -314,8 +314,8 @@ Distances in output have `sqrt` applied (actual L2 / cosine distance, not square
   the `vector` field is omitted. Use it for large `k`/`dim` to keep responses small.
 - `trace` is honoured only for `mode="hnsw"`; brute-force responses never contain a `trace` field.
 - Errors: unknown `vectorId` → `INVALID_REQUEST` (400), `k > N` → `K_EXCEEDS_N` (400), wrong dimension →
-  `INVALID_DIMENSION` (400), no index yet → `INDEX_NOT_FOUND` (404), building/error index →
-  `INDEX_NOT_READY` (409).
+  `INVALID_DIMENSION` (400), non-finite query components → `INVALID_REQUEST` (400), no index yet →
+  `INDEX_NOT_FOUND` (404), building/error index → `INDEX_NOT_READY` (409).
 
 **Distance representation by metric:** `l2` — actual Euclidean distance (`sqrt` of the squared L2 used
 internally); `cosine` — `1 - cosine similarity`; `inner_product` — negative dot product, so smaller

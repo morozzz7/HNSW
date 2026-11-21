@@ -281,6 +281,47 @@ func TestStartBuildRejectsInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestStartBuildRejectsEmptyDataset(t *testing.T) {
+	mgr := New(dataset.NewStore())
+	t.Cleanup(mgr.Close)
+
+	id, err := mgr.store.Add(&dataset.Dataset{N: 0, Dim: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.StartBuild(BuildConfig{
+		DatasetID: id, M: 8, EfConstruction: 50, Metric: hnsw.MetricL2,
+	}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("empty dataset build error = %v, want ErrInvalid", err)
+	}
+	if st := mgr.Status(); st.Status != StatusIdle {
+		t.Fatalf("status after rejected build = %s, want idle", st.Status)
+	}
+}
+
+func TestOperationsDuringRebuild(t *testing.T) {
+	mgr, ds := newTestManager(t, 200_000, 4)
+	cfg := BuildConfig{
+		DatasetID: ds.ID, M: 8, EfConstruction: 50, Metric: hnsw.MetricL2,
+	}
+	if _, err := mgr.StartBuild(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if st := mgr.Status(); st.Status != StatusBuilding {
+		t.Fatalf("status = %s, want building", st.Status)
+	}
+	if _, _, err := mgr.HNSWSearch([]float32{1, 2, 3, 4}, 1, 10, false); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("hnsw search during rebuild = %v, want ErrNotReady", err)
+	}
+	if _, err := mgr.BruteForceSearch([]float32{1, 2, 3, 4}, 1); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("bruteforce search during rebuild = %v, want ErrNotReady", err)
+	}
+	if _, _, err := mgr.InsertVector([]float32{1, 2, 3, 4}, "new"); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("insert during rebuild = %v, want ErrNotReady", err)
+	}
+	mgr.Close()
+}
+
 func TestRecoverBuildMarksError(t *testing.T) {
 	mgr := New(dataset.NewStore())
 	t.Cleanup(mgr.Close)

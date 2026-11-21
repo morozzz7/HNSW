@@ -1,8 +1,10 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '@/test/render'
 import { api } from '@/api/endpoints'
+import { server } from '@/mocks/server'
 import { setMockBuildDuration } from '@/mocks/state'
 import { SearchPage } from './SearchPage'
 
@@ -75,5 +77,40 @@ describe('SearchPage', () => {
     expect(screen.getByText(/Точность \(Recall\)/)).toBeInTheDocument()
     expect(screen.getByText(/Ускорение HNSW/)).toBeInTheDocument()
     expect(screen.getByText('Дистанция BF')).toBeInTheDocument()
+  })
+
+  it('shows a server error instead of silently dropping a failed search', async () => {
+    setMockBuildDuration(0)
+    await api.buildIndex({
+      datasetId: 'ds_000001',
+      M: 8,
+      efConstruction: 50,
+      metric: 'l2',
+      heuristic: true,
+      seed: 1,
+    })
+    server.use(
+      http.post('*/api/v1/search', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'K_EXCEEDS_N',
+              message: 'k=100 exceeds the number of indexed vectors 16',
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(<SearchPage />)
+
+    await user.click(await screen.findByRole('button', { name: /Выполнить поиск/ }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'k=100 exceeds the number of indexed vectors 16',
+    )
+    expect(screen.queryByText('Результаты k-NN')).not.toBeInTheDocument()
   })
 })

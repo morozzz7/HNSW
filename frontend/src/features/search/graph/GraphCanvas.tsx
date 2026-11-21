@@ -91,6 +91,12 @@ export function GraphCanvas({
     neighborhoodIds,
   })
 
+  const callbacksRef = useRef({ onSelectNode, onHoverNode })
+
+  useEffect(() => {
+    callbacksRef.current = { onSelectNode, onHoverNode }
+  }, [onSelectNode, onHoverNode])
+
   // Track fullscreen changes and resize camera
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -220,7 +226,7 @@ export function GraphCanvas({
 
       if (layoutMode === 'force' && graph.order > 1) {
         forceAtlas2.assign(graph, {
-          iterations: 60,
+          iterations: graph.order > 1500 ? 30 : 60,
           settings: {
             gravity: 1.2,
             scalingRatio: 2.5,
@@ -236,13 +242,17 @@ export function GraphCanvas({
       sigmaRef.current = null
     }
 
+    const nodeCount = isMultilayer
+      ? Array.from(allLayerVertices?.values() ?? []).reduce((sum, layer) => sum + layer.length, 0)
+      : vertices.length
+
     // Initialize Sigma WebGL renderer with screen pixel item sizing
     const sigma = new Sigma(graph, containerRef.current, {
       settings: {
         itemSizesReference: 'screen',
         autoRescale: true,
         stagePadding: 30,
-        renderLabels: true,
+        renderLabels: nodeCount <= 800,
       },
       nodeReducer: (nodeKey, data) => {
         const {
@@ -371,20 +381,20 @@ export function GraphCanvas({
 
     sigma.on('clickNode', ({ node }) => {
       const id = Number(graph.getNodeAttribute(node, 'id'))
-      onSelectNode(id)
+      callbacksRef.current.onSelectNode(id)
     })
 
     sigma.on('clickStage', () => {
-      onSelectNode(null)
+      callbacksRef.current.onSelectNode(null)
     })
 
     sigma.on('enterNode', ({ node }) => {
       const id = Number(graph.getNodeAttribute(node, 'id'))
-      onHoverNode?.(id)
+      callbacksRef.current.onHoverNode?.(id)
     })
 
     sigma.on('leaveNode', () => {
-      onHoverNode?.(null)
+      callbacksRef.current.onHoverNode?.(null)
     })
 
     sigmaRef.current = sigma
@@ -394,16 +404,7 @@ export function GraphCanvas({
       sigmaRef.current = null
       graphRef.current = null
     }
-  }, [
-    vertices,
-    edges,
-    activeLevel,
-    layoutMode,
-    isMultilayer,
-    allLayerVertices,
-    onSelectNode,
-    onHoverNode,
-  ])
+  }, [vertices, edges, activeLevel, layoutMode, isMultilayer, allLayerVertices])
 
   // Refresh sigma rendering when visual state flags change
   useEffect(() => {

@@ -1,18 +1,26 @@
-import { useQueries } from '@tanstack/react-query'
+import { useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { Network, Search as SearchIcon } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '@/app/PageHeader'
 import { api } from '@/api/endpoints'
+import { errorDetails, errorMessage } from '@/api/errors'
 import { useDataset } from '@/api/hooks/useDatasets'
 import { useGraphQuery } from '@/api/hooks/useGraph'
 import { useIndexStats, useIndexStatus } from '@/api/hooks/useIndex'
 import { useSearchMutation, type SearchOutcome } from '@/api/hooks/useSearch'
 import { queryKeys } from '@/api/keys'
-import type { GraphEdge, GraphVertex, SearchInput, UISearchMode } from '@/api/schemas'
+import type {
+  GraphEdge,
+  GraphResponse,
+  GraphVertex,
+  SearchInput,
+  UISearchMode,
+} from '@/api/schemas'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { ErrorBanner } from '@/components/ui/ErrorBanner'
 import { GraphCanvas } from './graph/GraphCanvas'
 import { GraphLegend } from './graph/GraphLegend'
 import { LayerSelector } from './graph/LayerSelector'
@@ -24,7 +32,33 @@ import type { LayoutMode } from './labels'
 import { SearchForm } from './SearchForm'
 import { SearchResults } from './SearchResults'
 
+interface LayerGraphData {
+  vertices: Map<number, GraphVertex[]>
+  edges: GraphEdge[]
+  loading: boolean
+  error: boolean
+}
+
+function combineLayerGraphs(results: UseQueryResult<GraphResponse, Error>[]): LayerGraphData {
+  const vertices = new Map<number, GraphVertex[]>()
+  const edges: GraphEdge[] = []
+  let loading = false
+  let error = false
+  results.forEach((result, level) => {
+    if (result.data?.vertices) {
+      vertices.set(level, result.data.vertices)
+    }
+    if (result.data?.edges) {
+      edges.push(...result.data.edges)
+    }
+    if (result.isLoading) loading = true
+    if (result.isError) error = true
+  })
+  return { vertices, edges, loading, error }
+}
+
 export function SearchPage() {
+  const queryClient = useQueryClient()
   const statusQuery = useIndexStatus()
   const isIndexReady = statusQuery.data?.status === 'ready'
   const statsQuery = useIndexStats(isIndexReady)
@@ -61,7 +95,7 @@ export function SearchPage() {
 
   // Queries for multilayer 2.5D view across all levels
   const maxLevel = stats?.maxLevel ?? 0
-  const multilayerQueries = useQueries({
+  const layerGraph = useQueries({
     queries: Array.from({ length: maxLevel + 1 }, (_, lvl) => ({
       queryKey: queryKeys.graph(lvl, 300, undefined),
       queryFn: ({ signal }: { signal?: AbortSignal }) =>
@@ -69,32 +103,13 @@ export function SearchPage() {
       enabled: isIndexReady && isMultilayer,
       staleTime: 60_000,
     })),
+    combine: combineLayerGraphs,
   })
 
-  const allLayerVertices = useMemo(() => {
-    if (!isMultilayer) return undefined
-    const map = new Map<number, GraphVertex[]>()
-    multilayerQueries.forEach((q, lvl) => {
-      if (q.data?.vertices) {
-        map.set(lvl, q.data.vertices)
-      }
-    })
-    return map
-  }, [isMultilayer, multilayerQueries])
-
-  const allLayerEdges = useMemo(() => {
-    if (!isMultilayer) return []
-    const list: GraphEdge[] = []
-    multilayerQueries.forEach((q) => {
-      if (q.data?.edges) {
-        list.push(...q.data.edges)
-      }
-    })
-    return list
-  }, [isMultilayer, multilayerQueries])
-
-  const isMultilayerLoading = isMultilayer && multilayerQueries.some((q) => q.isLoading)
-  const isMultilayerError = isMultilayer && multilayerQueries.some((q) => q.isError)
+  const allLayerVertices = layerGraph.vertices.size > 0 ? layerGraph.vertices : undefined
+  const allLayerEdges = layerGraph.edges
+  const isMultilayerLoading = isMultilayer && layerGraph.loading
+  const isMultilayerError = isMultilayer && layerGraph.error
 
   const isGraphLoading = isMultilayer ? isMultilayerLoading : graphQuery.isLoading
   const isGraphError = isMultilayer ? isMultilayerError : graphQuery.isError
@@ -184,6 +199,8 @@ export function SearchPage() {
   }, [searchOutcome?.hnsw?.trace])
 
   const handleSearchSubmit = (input: SearchInput, uiMode: UISearchMode) => {
+    setSearchOutcome(null)
+    setActiveTraceStep(null)
     searchMutation.mutate(
       { input, uiMode },
       {
@@ -245,6 +262,13 @@ export function SearchPage() {
             searching={searchMutation.isPending}
             onSubmit={handleSearchSubmit}
           />
+
+          {searchMutation.error ? (
+            <ErrorBanner
+              title="Поиск не выполнен"
+              message={errorDetails(searchMutation.error) ?? errorMessage(searchMutation.error)}
+            />
+          ) : null}
 
           {searchOutcome ? (
             <SearchResults
@@ -334,7 +358,7 @@ export function SearchPage() {
                       size="sm"
                       onClick={() => {
                         if (isMultilayer) {
-                          multilayerQueries.forEach((q) => void q.refetch())
+                          void queryClient.refetchQueries({ queryKey: ['graph'] })
                         } else {
                           void graphQuery.refetch()
                         }

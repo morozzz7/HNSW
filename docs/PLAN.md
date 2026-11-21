@@ -12,7 +12,7 @@
 
 Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
-**Current status:** Stage 0 (repository setup), Stage 1 (HNSW core), Stage 2 (Data), Stage 3 (Brute force and quality metrics), Stage 4 (Benchmark module), Stage 5 (HTTP API) and Stage 5.5 (backend hardening) are complete. Stage 6 (frontend skeleton, datasets, index build & stats) is complete. Stage 7 (frontend search, comparison, and graph visualization: 7.1–7.10) is complete. Stage 8 (frontend benchmark: 8.1–8.7) is complete.
+**Current status:** Stages 0–8 (backend, HTTP API, backend hardening, frontend skeleton, datasets, index build, search, graph visualization and benchmark) are complete. Stage 9 (integration and polish: 9.1–9.5) is complete; Stage 10 (experiments and coursework text) is not started.
 
 ---
 
@@ -143,11 +143,11 @@ Legend: `[ ]` not started · `[~]` in progress / blocked · `[x]` done
 
 ## Stage 9. Integration and polish
 
-- [ ] 9.1 End-to-end scenario: upload -> index -> search -> graph -> benchmark
-- [ ] 9.2 Edge cases (empty dataset, k > N, wrong dimension, rebuild)
-- [ ] 9.3 UI performance on 2000+ node graphs
-- [ ] 9.4 `docker-compose.yml` (optional)
-- [ ] 9.5 README: run instructions, screenshots
+- [x] 9.1 End-to-end scenario: upload -> index -> search -> graph -> benchmark
+- [x] 9.2 Edge cases (empty dataset, k > N, wrong dimension, rebuild)
+- [x] 9.3 UI performance on 2000+ node graphs
+- [x] 9.4 `docker-compose.yml` (optional)
+- [x] 9.5 README: run instructions, screenshots
 
 ## Stage 10. Experiments and coursework text
 
@@ -204,8 +204,15 @@ _None yet._
 - Benchmark jobs have no SSE endpoint: `GET /benchmark/{id}` is polled every 800 ms while the job is `queued`/`running`. Grid series are pairs `(M, efConstruction)` because metric and heuristic are fixed by the current index; build time is deduplicated by that pair.
 - PNG export serializes the chart SVG with computed styles inlined, renders it to a 2× canvas and downloads it; CSV export uses a stable `recall` column independent of `k`, matching the backend CSV contract.
 - MSW generates deterministic benchmark results (`setMockBenchmarkDuration` controls progress) and emits the dynamic `recall@<k>` field so the client schema is exercised without a backend.
+- Search failures are surfaced in the UI via `ErrorBanner` using the backend error message; `SearchPage` clears the previous outcome before a new query. The manual vector form warns when `k` exceeds the dataset size.
+- `hnsw.Search` / `SearchWithTrace` reject non-positive `k`; `POST /search` additionally rejects non-finite query components (documented in `docs/API.md`).
+- Multilayer graph data is combined by `useQueries({ combine })` with a module-level function so query results are structurally shared; `GraphCanvas` keeps handlers in a ref and rebuilds Sigma only when graph data or layout changes. Labels are disabled above 800 nodes and ForceAtlas2 uses 30 iterations above 1500 nodes.
+- `docker-compose.yml` runs the Go backend and Vite frontend from official images (no Dockerfiles); Vite takes the proxy target from `VITE_API_PROXY_TARGET` so Compose can point it at `http://backend:8080`.
+- README embeds four real UI screenshots from `docs/screenshots/` captured with Playwright in mocks mode; no E2E framework is committed to the repository.
 
 ## Change log
+
+| 2026-11-21 | fullstack | Этап 9 (9.1–9.5): сквозной прогон в Chromium на реальном бэкенде (загрузка CSV и генерация → сборка → поиск с трассировкой → граф → бенчмарк), проверены rebuild и `k > N`; исправлено молчаливое игнорирование ошибок поиска в `SearchPage` (теперь `ErrorBanner` с сообщением сервера), добавлены подсказка при `k > N`, блокировка кнопки сборки и тесты граничных случаев (пустой датасет, `k > N`, неверная размерность, rebuild, NaN/Inf в API, отрицательный `k` в ядре). Оптимизация графа: колбэки вынесены в ref, данные многослойного вида комбинируются через `useQueries({ combine })`, подписи отключаются свыше 800 узлов, ForceAtlas2 — 30 итераций свыше 1500; регрессионный тест и замер на 2000 узлов / 17 051 ребро (загрузка 3,2 с, 40 наведений за 0,66 с, пересоздание Sigma только при смене слоя). Добавлены `docker-compose.yml` и env-прокси Vite, обновлён README с четырьмя скриншотами в `docs/screenshots/`. Проверка: `gofmt -l .` чисто, `go vet ./...` — ok, `go test ./...` — ok, `go test -race ./...` — ok; `npm run format:check`, `npm run lint`, `npm run test` (48 тестов), `npm run build` — ok; `docker-compose config` — ok (демон Docker не запущен, контейнерный Smoke-тест не выполнялся). |
 
 | 2026-11-21 | frontend | Этап 8 (8.1–8.7): `BenchmarkPage` — форма сетки `M × efConstruction × efSearch` (пресеты, дедупликация списков, лимит 256 комбинаций, k и queries), запуск и поллинг `GET /benchmark/{id}` каждые 800 мс с прогрессом; карточки сравнения с перебором (QPS BF, лучший recall, QPS при целевом recall, максимальное ускорение); четыре SVG-графика (recall@k vs efSearch, QPS vs recall с Парето-фронтом, p50/p95/p99, время построения по M и efC) с переключаемыми сериями и экспортом PNG; сортируемая таблица 24+ строк с экспортом CSV. API-слой: zod-схемы (нормализация `recall@<k>`), `runBenchmark`/`benchmarkJob`, хук `useBenchmarkJob`. MSW-мок бенчмарка с детерминированными результатами и прогрессом. Проверка: `npm run format:check` — ok, `npm run lint` — ok, `npm run test` — 43 теста ok, `npm run build` — ok; ручной прогон в Chromium (`dev:mocks`): 4 графика, 24 строки, CSV и PNG скачиваются, ошибок в консоли нет. |
 

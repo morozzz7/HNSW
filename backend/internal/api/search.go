@@ -122,6 +122,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("query dimension %d does not match index dimension %d", len(query), dim))
 		return
 	}
+	for _, component := range query {
+		if math.IsNaN(float64(component)) || math.IsInf(float64(component), 0) {
+			writeError(w, http.StatusBadRequest, codeInvalidRequest, "vector components must be finite")
+			return
+		}
+	}
 
 	ef := req.EfSearch
 	if ef < req.K {

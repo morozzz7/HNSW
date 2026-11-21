@@ -68,6 +68,9 @@ func (idx *Index) Search(q []float32, k, efSearch int) ([]Result, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
+	if k < 1 {
+		return nil, fmt.Errorf("hnsw: k must be positive, got %d", k)
+	}
 	if len(idx.nodes) == 0 {
 		return nil, nil
 	}
@@ -106,6 +109,9 @@ func (idx *Index) SearchWithTrace(q []float32, k, efSearch int) ([]Result, *Trac
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
+	if k < 1 {
+		return nil, nil, fmt.Errorf("hnsw: k must be positive, got %d", k)
+	}
 	if len(idx.nodes) == 0 {
 		return nil, nil, nil
 	}

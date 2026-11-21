@@ -352,4 +352,56 @@ func TestEmptyIndexSearch(t *testing.T) {
 	if len(res) != 0 {
 		t.Fatalf("empty index search should return no results, got %d", len(res))
 	}
+	res, trace, err := idx.SearchWithTrace([]float32{1, 2, 3}, 5, 10)
+	if err != nil || len(res) != 0 || trace != nil {
+		t.Fatalf("traced search on empty index = (%v, %v, %v)", res, trace, err)
+	}
+}
+
+func TestSearchKExceedsN(t *testing.T) {
+	idx := MustNew(defaultConfig())
+	for i := 0; i < 5; i++ {
+		if _, err := idx.Insert([]float32{float32(i), 1}, uint32(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := idx.Search([]float32{0, 1}, 100, 200)
+	if err != nil {
+		t.Fatalf("search with k > n: %v", err)
+	}
+	if len(res) != 5 {
+		t.Fatalf("got %d results, want 5", len(res))
+	}
+	res, trace, err := idx.SearchWithTrace([]float32{0, 1}, 100, 200)
+	if err != nil || len(res) != 5 || trace == nil {
+		t.Fatalf("traced search with k > n = (%d results, %v, %v)", len(res), trace, err)
+	}
+}
+
+func TestSearchRejectsInvalidK(t *testing.T) {
+	idx := MustNew(defaultConfig())
+	if _, err := idx.Insert([]float32{1, 2}, 1); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []int{-1, 0} {
+		if _, err := idx.Search([]float32{1, 2}, k, 10); err == nil {
+			t.Fatalf("Search with k=%d should fail", k)
+		}
+		if _, _, err := idx.SearchWithTrace([]float32{1, 2}, k, 10); err == nil {
+			t.Fatalf("SearchWithTrace with k=%d should fail", k)
+		}
+	}
+}
+
+func TestSearchRejectsWrongQueryDimension(t *testing.T) {
+	idx := MustNew(defaultConfig())
+	if _, err := idx.Insert([]float32{1, 2, 3}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := idx.Search([]float32{1, 2}, 1, 10); err == nil {
+		t.Fatal("Search with wrong query dimension should fail")
+	}
+	if _, _, err := idx.SearchWithTrace([]float32{1, 2}, 1, 10); err == nil {
+		t.Fatal("SearchWithTrace with wrong query dimension should fail")
+	}
 }

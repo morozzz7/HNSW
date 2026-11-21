@@ -172,7 +172,15 @@ export function SearchForm({ dataset, searching, onSubmit }: SearchFormProps) {
 
         {/* Parameters: k, efSearch */}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="k (соседей)" htmlFor="search-k" description="от 1 до 1000">
+          <Field
+            label="k (соседей)"
+            htmlFor="search-k"
+            description={
+              dataset && dataset.n > 0 && k > dataset.n
+                ? `k больше числа векторов (${dataset.n}) — запрос будет отклонён`
+                : 'от 1 до 1000'
+            }
+          >
             <Input
               id="search-k"
               type="number"

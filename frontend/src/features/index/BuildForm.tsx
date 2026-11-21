@@ -43,6 +43,7 @@ export function BuildForm({ datasets, building, error, onSubmit }: BuildFormProp
   const activeDataset = datasets.find((dataset) => dataset.id === activeId)
 
   const submit = () => {
+    if (building) return
     const parsed = buildIndexInputSchema.safeParse({
       datasetId: activeId,
       M: Number(m),
@@ -221,7 +222,12 @@ export function BuildForm({ datasets, building, error, onSubmit }: BuildFormProp
         ) : null}
 
         <div className="flex justify-end">
-          <Button type="submit" size="sm" loading={building} disabled={datasets.length === 0}>
+          <Button
+            type="submit"
+            size="sm"
+            loading={building}
+            disabled={building || datasets.length === 0}
+          >
             <Play aria-hidden className="size-4" />
             {building ? 'Идёт сборка' : 'Построить индекс'}
           </Button>
