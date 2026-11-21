@@ -4,6 +4,7 @@ import { Focus, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Sigma from 'sigma'
 import type { GraphEdge, GraphVertex } from '@/api/schemas'
+import { useTheme } from '@/app/theme'
 import { getLayerColor, type LayoutMode } from '../labels'
 
 interface GraphCanvasProps {
@@ -78,6 +79,8 @@ export function GraphCanvas({
   onHoverNode,
   className,
 }: GraphCanvasProps) {
+  const { theme } = useTheme()
+  const labelColor = theme === 'dark' ? '#e8f0ec' : '#3a4a43'
   const rootRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sigmaRef = useRef<Sigma | null>(null)
@@ -161,6 +164,7 @@ export function GraphCanvas({
             y: yIso,
             size: v.isEntryPoint ? 6 : Math.max(3, Math.min(8, 2.5 + level * 1.0)),
             label: level === activeLevel ? `#${v.id}` : '',
+            labelColor,
             color,
             isEntryPoint: v.isEntryPoint,
           })
@@ -221,6 +225,7 @@ export function GraphCanvas({
             y: pos.y,
             size: v.isEntryPoint ? 7 : Math.max(3, Math.min(8, 2.5 + v.level * 1.2)),
             label: v.isEntryPoint ? `★ #${v.id}` : `#${v.id}`,
+            labelColor,
             color,
             isEntryPoint: v.isEntryPoint,
           })
@@ -306,6 +311,9 @@ export function GraphCanvas({
             color: '#fb923c',
             size: Math.max(12, data.size * 2.4),
             label: `${pathPosition + 1} · #${nodeId}`,
+            labelVisibility: 'visible',
+            labelSize: 16,
+            labelWeight: 'bold',
             highlighted: true,
             zIndex: 110,
           }
@@ -317,6 +325,9 @@ export function GraphCanvas({
             color: '#ffffff',
             size: Math.max(9, data.size * 2),
             label: `${pathPosition + 1} · #${nodeId}`,
+            labelVisibility: 'visible',
+            labelSize: 16,
+            labelWeight: 'bold',
             highlighted: true,
             zIndex: 100,
           }
@@ -343,13 +354,7 @@ export function GraphCanvas({
         }
 
         if (traceActive) {
-          return {
-            ...data,
-            color: 'rgba(110, 130, 120, 0.18)',
-            size: Math.max(2, data.size * 0.75),
-            label: '',
-            zIndex: 0,
-          }
+          return { ...data, label: '', zIndex: 0 }
         }
 
         if (isVisited) {
@@ -386,7 +391,6 @@ export function GraphCanvas({
           selectedNodeId: selId,
           visitedNodeIds: visIds,
           currentDescentNodeId: descentId,
-          tracePathIds: pathIds,
           tracePathEdgeKeys: pathEdgeKeys,
           resultRanks: resRanks,
           neighborhoodIds: nbrIds,
@@ -402,15 +406,6 @@ export function GraphCanvas({
             color: '#ffffff',
             size: 3,
             zIndex: 60,
-          }
-        }
-
-        if (pathIds && pathIds.length > 0) {
-          return {
-            ...data,
-            color: 'rgba(120, 140, 130, 0.06)',
-            size: 0.5,
-            zIndex: 0,
           }
         }
 
@@ -465,7 +460,7 @@ export function GraphCanvas({
       sigmaRef.current = null
       graphRef.current = null
     }
-  }, [vertices, edges, activeLevel, layoutMode, isMultilayer, allLayerVertices])
+  }, [vertices, edges, activeLevel, layoutMode, isMultilayer, allLayerVertices, labelColor])
 
   // Refresh sigma rendering when visual state flags change
   useEffect(() => {

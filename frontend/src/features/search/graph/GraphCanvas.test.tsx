@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GraphEdge, GraphVertex } from '@/api/schemas'
+import { ThemeProvider } from '@/app/ThemeProvider'
 import { GraphCanvas } from './GraphCanvas'
 
 const { sigmaConstructor } = vi.hoisted(() => ({ sigmaConstructor: vi.fn() }))
@@ -38,11 +40,19 @@ describe('GraphCanvas', () => {
       onHoverNode: () => {},
     }
 
-    const { rerender } = render(<GraphCanvas {...props} />)
+    const wrap = (ui: ReactElement) => <ThemeProvider>{ui}</ThemeProvider>
+    const { rerender } = render(wrap(<GraphCanvas {...props} />))
     expect(sigmaConstructor).toHaveBeenCalledTimes(1)
 
     rerender(
-      <GraphCanvas {...props} onSelectNode={() => {}} onHoverNode={() => {}} selectedNodeId={2} />,
+      wrap(
+        <GraphCanvas
+          {...props}
+          onSelectNode={() => {}}
+          onHoverNode={() => {}}
+          selectedNodeId={2}
+        />,
+      ),
     )
     expect(sigmaConstructor).toHaveBeenCalledTimes(1)
   })
