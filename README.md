@@ -1,5 +1,19 @@
 # HNSW Coursework
 
+![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white)
+![TypeScript 6](https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)
+![Vite 8](https://img.shields.io/badge/Vite-8-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Tailwind CSS 4](https://img.shields.io/badge/Tailwind-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+
+![TanStack Query 5](https://img.shields.io/badge/TanStack%20Query-5-FF4154?style=for-the-badge&logo=tanstack&logoColor=white)
+![Sigma.js 3](https://img.shields.io/badge/Sigma.js-3-5B8FF9?style=for-the-badge)
+![HNSW from scratch](https://img.shields.io/badge/HNSW-from%20scratch-5BE0B5?style=for-the-badge)
+![CI passing](https://img.shields.io/badge/CI-passing-2EA043?style=for-the-badge&logo=githubactions&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+**English** · [Русский](README_RU.md)
+
 Design of the HNSW data structure and its use for approximate nearest neighbor search.
 
 ## Status
@@ -8,6 +22,118 @@ All planned stages are complete: HNSW core, dataset loaders and generators, brut
 quality metrics, benchmark module, HTTP API, CLI-verified backend hardening, and the React UI
 (datasets, index build, search, graph visualization, benchmark). Stage 9 covers the end-to-end
 scenario, edge cases, graph performance, Docker Compose and documentation.
+
+## Architecture
+
+### Service
+
+```mermaid
+flowchart LR
+  subgraph Client["Browser · :5173"]
+    Pages["React pages<br/>Datasets · Build · Search · Benchmark"]
+    Hooks["TanStack Query<br/>zod validation"]
+  end
+
+  subgraph Edge["Vite dev server · :5173"]
+    Proxy["/api → :8080<br/>VITE_API_PROXY_TARGET"]
+    Mock["MSW mocks<br/>VITE_USE_MOCKS"]
+  end
+
+  subgraph HTTP["Go HTTP API · :8080"]
+    Routes["net/http<br/>CORS · errors · SSE"]
+    Manager["indexmanager<br/>build state · external IDs · RWMutex"]
+  end
+
+  subgraph Core["Core packages"]
+    HNSW["hnsw<br/>graph + search"]
+    Brute["bruteforce<br/>exact k-NN"]
+    Data["dataset + projection<br/>loaders · PCA"]
+    Bench["benchmark<br/>grid · metrics · export"]
+  end
+
+  subgraph Storage["Data"]
+    Files["CSV / JSON / .fvecs"]
+    Memory["In-memory store · 1 GiB"]
+    Snapshot["Index snapshot · *.idx"]
+  end
+
+  Pages --> Hooks --> Proxy
+  Mock -.-> Hooks
+  Proxy --> Routes --> Manager
+  Manager --> HNSW
+  Manager --> Brute
+  Manager --> Data
+  Manager --> Bench
+  Data --> Files
+  Data --> Memory
+  Manager --> Snapshot
+  Bench --> HNSW
+  Bench --> Brute
+  Routes -- "SSE: progress / done / error" --> Pages
+
+  click Pages "docs/screenshots/03-search-graph.png" "UI screenshot"
+  click Proxy "frontend/vite.config.ts" "Vite proxy configuration"
+  click Routes "docs/API.md" "HTTP contract"
+  click Manager "backend/internal/indexmanager" "Index manager source"
+  click HNSW "backend/internal/hnsw" "HNSW core source"
+  click Brute "backend/internal/bruteforce" "Brute force source"
+  click Data "backend/internal/dataset" "Dataset source"
+  click Bench "backend/internal/benchmark" "Benchmark source"
+```
+
+### HNSW algorithm
+
+```mermaid
+flowchart TB
+  subgraph Graph["Multilayer structure"]
+    Entry["L2 · entry point"]
+    Mid["L1 · sparse long links"]
+    Base["L0 · all vectors"]
+    Entry --> Mid --> Base
+  end
+
+  subgraph InsertFlow["INSERT — Algorithm 1"]
+    I1["Level: floor(-ln(U) · mL)"]
+    I2["SEARCH-LAYER from the entry point"]
+    I3["SELECT-NEIGHBORS-HEURISTIC"]
+    I4["Bidirectional links + shrink on overflow"]
+    I1 --> I2 --> I3 --> I4
+  end
+
+  subgraph SearchFlow["K-NN SEARCH — Algorithm 5"]
+    S1["Start at the entry point on maxLevel"]
+    S2["Greedy descent: one closest node per layer"]
+    S3["SEARCH-LAYER on L0 with ef = max(efSearch, k)"]
+    S4["Return k nearest by distance"]
+    S5["Recall@k against brute force"]
+    S1 --> S2 --> S3 --> S4 --> S5
+  end
+
+  subgraph Primitives["Shared primitives"]
+    Dist["squared L2 / cosine / inner product"]
+    Visited["visited set: generation + sync.Pool"]
+    Heap["typed min/max heaps"]
+    Select["simple / heuristic neighbor selection"]
+  end
+
+  Entry --> I2
+  Base --> I4
+  Entry --> S1
+  Base --> S3
+  Dist --> S3
+  Visited --> S2
+  Heap --> S3
+  Select --> I3
+
+  click I1 "backend/internal/hnsw/index.go" "Level generation"
+  click I2 "backend/internal/hnsw/insert.go" "INSERT and SEARCH-LAYER call sites"
+  click I3 "backend/internal/hnsw/neighbors.go" "Neighbor selection algorithms"
+  click S2 "backend/internal/hnsw/search.go" "SEARCH-LAYER and K-NN SEARCH"
+  click Dist "backend/internal/hnsw/distance.go" "Distance metrics"
+  click Visited "backend/internal/hnsw/visited.go" "Visited set"
+  click Heap "backend/internal/hnsw/heap.go" "Typed heaps"
+  click S5 "backend/internal/bruteforce" "Exact reference search"
+```
 
 ## Stack
 
@@ -18,6 +144,7 @@ scenario, edge cases, graph performance, Docker Compose and documentation.
 ## Repository layout
 
 ```
+README_RU.md       Russian version of this document
 backend/            Go backend: cmd/server, internal/{hnsw,bruteforce,dataset,projection,benchmark,api,indexmanager}
 frontend/           React + TypeScript (Vite) UI
 docs/               PLAN.md, API.md, screenshots/
