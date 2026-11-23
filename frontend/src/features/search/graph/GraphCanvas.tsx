@@ -1,10 +1,10 @@
 import Graph from 'graphology'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
 import { Focus, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Sigma from 'sigma'
 import type { GraphEdge, GraphVertex } from '@/api/schemas'
-import { useTheme } from '@/app/theme'
+import { useTheme, type Theme } from '@/app/theme'
 import { getLayerColor, type LayoutMode } from '../labels'
 
 interface GraphCanvasProps {
@@ -24,6 +24,22 @@ interface GraphCanvasProps {
   onSelectNode: (id: number | null) => void
   onHoverNode?: (id: number | null) => void
   className?: string
+}
+
+const ROUTE_COLOR = '#8b5cf6'
+const CURRENT_STEP_COLOR = '#22d3ee'
+const RESULT_COLOR = '#ec4899'
+
+function mutedLayerColor(color: string, theme: Theme, weight = 0.4): string {
+  const hex = color.replace('#', '')
+  if (hex.length !== 6) return color
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  const target = theme === 'dark' ? [11, 15, 14] : [16, 25, 21]
+  const mix = (value: number, index: number) =>
+    Math.round(value + (target[index]! - value) * weight)
+  return `rgb(${mix(r, 0)}, ${mix(g, 1)}, ${mix(b, 2)})`
 }
 
 function normalizeCoordinates(verts: GraphVertex[]): Map<number, { x: number; y: number }> {
@@ -81,6 +97,7 @@ export function GraphCanvas({
 }: GraphCanvasProps) {
   const { theme } = useTheme()
   const labelColor = theme === 'dark' ? '#e8f0ec' : '#3a4a43'
+  const accentColor = theme === 'dark' ? '#5be0b5' : '#0b7a5f'
   const rootRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sigmaRef = useRef<Sigma | null>(null)
@@ -163,7 +180,7 @@ export function GraphCanvas({
             x: xIso,
             y: yIso,
             size: v.isEntryPoint ? 6 : Math.max(3, Math.min(8, 2.5 + level * 1.0)),
-            label: level === activeLevel ? `#${v.id}` : '',
+            label: v.isEntryPoint ? '★' : '',
             labelColor,
             color,
             isEntryPoint: v.isEntryPoint,
@@ -224,7 +241,7 @@ export function GraphCanvas({
             x: pos.x,
             y: pos.y,
             size: v.isEntryPoint ? 7 : Math.max(3, Math.min(8, 2.5 + v.level * 1.2)),
-            label: v.isEntryPoint ? `★ #${v.id}` : `#${v.id}`,
+            label: v.isEntryPoint ? '★' : '',
             labelColor,
             color,
             isEntryPoint: v.isEntryPoint,
@@ -280,17 +297,12 @@ export function GraphCanvas({
       sigmaRef.current = null
     }
 
-    const nodeCount = isMultilayer
-      ? Array.from(allLayerVertices?.values() ?? []).reduce((sum, layer) => sum + layer.length, 0)
-      : vertices.length
-
-    // Initialize Sigma WebGL renderer with screen pixel item sizing
     const sigma = new Sigma(graph, containerRef.current, {
       settings: {
         itemSizesReference: 'screen',
         autoRescale: true,
         stagePadding: 30,
-        renderLabels: nodeCount <= 800,
+        renderLabels: true,
       },
       nodeReducer: (nodeKey, data) => {
         const {
@@ -317,71 +329,82 @@ export function GraphCanvas({
           ...value,
           labelColor: isHovered ? '#111827' : labelColor,
         })
+        const labelAttrs = isSelected
+          ? {
+              label: `#${nodeId}`,
+              labelVisibility: 'visible' as const,
+              labelSize: 16,
+              forceLabel: true,
+            }
+          : {}
 
         if (!inNeighborhood && !isCurrentDescent && !isVisited && !isResult && !isSelected) {
           return styled({
             ...data,
-            color: 'rgba(120, 140, 130, 0.12)',
+            color: mutedLayerColor(String(data.color), theme, 0.65),
             label: '',
             zIndex: 0,
-          })
-        }
-
-        if (isOnTrace && isCurrentDescent) {
-          return styled({
-            ...data,
-            color: '#fb923c',
-            size: Math.max(12, data.size * 2.4),
-            label: `${pathPosition + 1} · #${nodeId}`,
-            labelVisibility: 'visible',
-            labelSize: 16,
-            highlighted: true,
-            zIndex: 110,
-          })
-        }
-
-        if (isOnTrace) {
-          return styled({
-            ...data,
-            color: '#ffffff',
-            size: Math.max(9, data.size * 2),
-            label: `${pathPosition + 1} · #${nodeId}`,
-            labelVisibility: 'visible',
-            labelSize: 16,
-            highlighted: true,
-            zIndex: 100,
           })
         }
 
         if (isSelected) {
           return styled({
             ...data,
-            color: '#5be0b5',
-            size: Math.max(9, data.size * 1.8),
+            ...labelAttrs,
+            color: accentColor,
+            size: Math.max(7.5, data.size * 1.8),
             highlighted: true,
-            zIndex: 90,
+            zIndex: 120,
           })
         }
 
         if (isResult) {
           return styled({
             ...data,
-            color: '#38bdf8',
-            size: Math.max(6.5, data.size * 1.3),
+            label: '',
+            color: RESULT_COLOR,
+            size: Math.max(5.5, data.size * 1.6),
             highlighted: true,
-            zIndex: 40,
+            zIndex: 110,
+          })
+        }
+
+        if (isOnTrace && isCurrentDescent) {
+          return styled({
+            ...data,
+            color: CURRENT_STEP_COLOR,
+            size: Math.max(8, data.size * 2),
+            highlighted: true,
+            zIndex: 100,
+          })
+        }
+
+        if (isOnTrace) {
+          return styled({
+            ...data,
+            label: '',
+            color: ROUTE_COLOR,
+            size: Math.max(6, data.size * 1.7),
+            highlighted: true,
+            zIndex: 90,
           })
         }
 
         if (traceActive) {
-          return styled({ ...data, label: '', zIndex: 0 })
+          return styled({
+            ...data,
+            color: mutedLayerColor(String(data.color), theme),
+            label: '',
+            zIndex: 0,
+          })
         }
 
         if (isVisited) {
           return styled({
             ...data,
-            color: '#5be0b5',
-            size: Math.max(7, data.size * 1.4),
+            label: '',
+            color: accentColor,
+            size: Math.max(6, data.size * 1.4),
             highlighted: true,
             zIndex: 50,
           })
@@ -390,7 +413,7 @@ export function GraphCanvas({
         if (isHovered) {
           return styled({
             ...data,
-            size: data.size * 1.4,
+            size: data.size * 1.3,
             zIndex: 60,
           })
         }
@@ -402,19 +425,12 @@ export function GraphCanvas({
         if (isInterLayer) {
           return {
             ...data,
-            color: 'rgba(91, 224, 181, 0.65)',
+            color: 'rgba(125, 143, 135, 0.45)',
             size: 1.5,
           }
         }
 
-        const {
-          selectedNodeId: selId,
-          visitedNodeIds: visIds,
-          currentDescentNodeId: descentId,
-          tracePathEdgeKeys: pathEdgeKeys,
-          resultRanks: resRanks,
-          neighborhoodIds: nbrIds,
-        } = visualStateRef.current
+        const { tracePathEdgeKeys: pathEdgeKeys, neighborhoodIds: nbrIds } = visualStateRef.current
 
         const [u, v] = graph.extremities(edgeKey)
         const uId = Number(graph.getNodeAttribute(u, 'id'))
@@ -423,23 +439,9 @@ export function GraphCanvas({
         if (pathEdgeKeys.has(`${Math.min(uId, vId)}:${Math.max(uId, vId)}`)) {
           return {
             ...data,
-            color: '#ffffff',
+            color: ROUTE_COLOR,
             size: 3,
             zIndex: 60,
-          }
-        }
-
-        const uHighlight =
-          uId === selId || visIds?.has(uId) || resRanks?.has(uId) || uId === descentId
-        const vHighlight =
-          vId === selId || visIds?.has(vId) || resRanks?.has(vId) || vId === descentId
-
-        if (uHighlight && vHighlight) {
-          return {
-            ...data,
-            color: '#5be0b5',
-            size: 2,
-            zIndex: 20,
           }
         }
 
@@ -480,10 +482,20 @@ export function GraphCanvas({
       sigmaRef.current = null
       graphRef.current = null
     }
-  }, [vertices, edges, activeLevel, layoutMode, isMultilayer, allLayerVertices, labelColor])
+  }, [
+    vertices,
+    edges,
+    activeLevel,
+    layoutMode,
+    isMultilayer,
+    allLayerVertices,
+    labelColor,
+    accentColor,
+    theme,
+  ])
 
-  // Refresh sigma rendering when visual state flags change
-  useEffect(() => {
+  // Apply visual state before the graph effect rebuilds Sigma on a layer switch
+  useLayoutEffect(() => {
     visualStateRef.current = {
       selectedNodeId,
       hoveredNodeId,

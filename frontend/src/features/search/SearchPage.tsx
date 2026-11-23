@@ -145,22 +145,60 @@ export function SearchPage() {
       [],
     [searchOutcome, activeLevel],
   )
-  const traceVertices = useQueries({
-    queries: traceIdsOnLevel.map((id) => ({
-      queryKey: queryKeys.graph(activeLevel, 1, String(id)),
+
+  const hasTrace = Boolean(searchOutcome?.hnsw?.trace)
+  const resultsRevealed = !hasTrace || !showTraceOverlay || activeTraceStep?.isLastStep === true
+
+  const allResultRanks = useMemo(() => {
+    const map = new Map<number, number>()
+    const list =
+      searchOutcome?.mode === 'bruteforce'
+        ? (searchOutcome.bruteforce?.results ?? [])
+        : (searchOutcome?.hnsw?.results ?? [])
+    list.forEach((item, idx) => map.set(item.id, idx + 1))
+    return map
+  }, [searchOutcome])
+
+  const resultRanks = useMemo(
+    () => (resultsRevealed ? allResultRanks : new Map<number, number>()),
+    [resultsRevealed, allResultRanks],
+  )
+
+  // Prefetch vertices of every trace level, so switching layers never blanks the canvas
+  const traceVertexRequests = useMemo(() => {
+    const requests = new Map<string, { level: number; id: number }>()
+    for (const layer of searchOutcome?.hnsw?.trace?.layers ?? []) {
+      for (const id of layer.visited) {
+        requests.set(`${layer.level}:${id}`, { level: layer.level, id })
+      }
+    }
+    for (const id of allResultRanks.keys()) {
+      requests.set(`0:${id}`, { level: 0, id })
+    }
+    return Array.from(requests.values())
+  }, [searchOutcome, allResultRanks])
+
+  const prefetchedVertices = useQueries({
+    queries: traceVertexRequests.map(({ level, id }) => ({
+      queryKey: queryKeys.graph(level, 1, String(id)),
       queryFn: ({ signal }: { signal?: AbortSignal }) =>
-        api.graph({ level: activeLevel, limit: 1, around: String(id) }, signal),
+        api.graph({ level, limit: 1, around: String(id) }, signal),
       enabled: isIndexReady && !isMultilayer,
       staleTime: 60_000,
+      retry: false,
     })),
     combine: combineGraphVertices,
   })
   const displayedVertices = useMemo(() => {
-    if (traceVertices.length === 0) return vertices
+    if (prefetchedVertices.length === 0) return vertices
+    const needed = new Set<number>(traceIdsOnLevel)
+    if (activeLevel === 0) {
+      for (const id of allResultRanks.keys()) needed.add(id)
+    }
     const present = new Set(vertices.map((v) => v.id))
-    const extra = traceVertices.filter((v) => !present.has(v.id))
+    const extra = prefetchedVertices.filter((v) => needed.has(v.id) && !present.has(v.id))
     return extra.length === 0 ? vertices : [...vertices, ...extra]
-  }, [vertices, traceVertices])
+  }, [vertices, prefetchedVertices, traceIdsOnLevel, activeLevel, allResultRanks])
 
   // Map of neighbors on current layer for selected node
   const inLayerNeighbors = useMemo(() => {
@@ -211,17 +249,6 @@ export function SearchPage() {
     }
     return displayedVertices.find((v) => v.id === selectedNodeId) ?? null
   }, [selectedNodeId, displayedVertices, isMultilayer, allLayerVertices])
-
-  // Results rank map
-  const resultRanks = useMemo(() => {
-    const map = new Map<number, number>()
-    const list =
-      searchOutcome?.mode === 'bruteforce'
-        ? (searchOutcome.bruteforce?.results ?? [])
-        : (searchOutcome?.hnsw?.results ?? [])
-    list.forEach((item, idx) => map.set(item.id, idx + 1))
-    return map
-  }, [searchOutcome])
 
   // Search trace visited node IDs on current layer
   const visitedNodeIds = useMemo(() => {

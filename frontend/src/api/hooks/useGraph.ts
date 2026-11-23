@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from '../endpoints'
 import { shouldRetry } from '../errors'
 import { queryKeys } from '../keys'
@@ -18,5 +18,6 @@ export function useGraphQuery({ level, limit = 500, around, enabled = true }: Us
     enabled,
     retry: shouldRetry,
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   })
 }

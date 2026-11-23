@@ -10,6 +10,7 @@ export interface TraceStep {
   closest: number
   visitedOnLevel: number[]
   isLayerLastStep: boolean
+  isLastStep: boolean
 }
 
 interface SearchPathOverlayProps {
@@ -41,11 +42,15 @@ export function SearchPathOverlay({ trace, onStepChange, onClose }: SearchPathOv
           closest: layer.closest,
           visitedOnLevel: [...visitedOnLevelSoFar],
           isLayerLastStep: i === layer.visited.length - 1,
+          isLastStep: false,
         })
         globalIndex += 1
       }
     }
 
+    if (list.length > 0) {
+      list[list.length - 1]!.isLastStep = true
+    }
     return list
   }, [trace])
 
