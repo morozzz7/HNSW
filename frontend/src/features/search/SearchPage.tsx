@@ -146,6 +146,22 @@ export function SearchPage() {
     [searchOutcome, activeLevel],
   )
 
+  const canvasEdges = useMemo(() => {
+    if (isMultilayer || traceIdsOnLevel.length < 2) return edges
+    const seen = new Set(edges.map((e) => `${Math.min(e.from, e.to)}:${Math.max(e.from, e.to)}`))
+    const missing: GraphEdge[] = []
+    for (let i = 1; i < traceIdsOnLevel.length; i += 1) {
+      const from = traceIdsOnLevel[i - 1]!
+      const to = traceIdsOnLevel[i]!
+      const key = `${Math.min(from, to)}:${Math.max(from, to)}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        missing.push({ from, to, level: activeLevel })
+      }
+    }
+    return missing.length === 0 ? edges : [...edges, ...missing]
+  }, [edges, traceIdsOnLevel, activeLevel, isMultilayer])
+
   const hasTrace = Boolean(searchOutcome?.hnsw?.trace)
   const resultsRevealed = !hasTrace || !showTraceOverlay || activeTraceStep?.isLastStep === true
 
@@ -438,7 +454,7 @@ export function SearchPage() {
             ) : (
               <GraphCanvas
                 vertices={isMultilayer ? vertices : displayedVertices}
-                edges={edges}
+                edges={canvasEdges}
                 activeLevel={activeLevel}
                 selectedNodeId={selectedNodeId}
                 hoveredNodeId={hoveredNodeId}
